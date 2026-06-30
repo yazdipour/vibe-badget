@@ -40,12 +40,18 @@ type chatResp struct {
 	} `json:"choices"`
 }
 
+type classifyResponse struct {
+	Category string `json:"category"`
+	Reason   string `json:"reason"`
+}
+
 // Classify asks the LLM to pick exactly one category for a transaction
-// partner, then snaps the answer to a known category name.
-func (l *LLM) Classify(ctx context.Context, partner string, categories []string) (string, error) {
+// partner and explain why, then snaps the answer to a known category name.
+func (l *LLM) Classify(ctx context.Context, partner string, categories []string) (string, string, error) {
 	prompt := fmt.Sprintf(
 		"You categorise bank transactions. Choose exactly ONE category from this list "+
-			"that best matches the merchant/partner. Reply with only the category name, nothing else.\n"+
+			"that best matches the merchant/partner, and give a one-sentence reason. "+
+			"Reply with ONLY a JSON object of the form {\"category\":\"<name>\",\"reason\":\"<reason>\"}, nothing else.\n"+
 			"Categories: %s\nPartner: %s",
 		strings.Join(categories, ", "), partner)
 
@@ -58,7 +64,7 @@ func (l *LLM) Classify(ctx context.Context, partner string, categories []string)
 	url := strings.TrimRight(l.cfg.BaseURL, "/") + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if l.cfg.APIKey != "" {
@@ -67,25 +73,45 @@ func (l *LLM) Classify(ctx context.Context, partner string, categories []string)
 
 	resp, err := l.hc.Do(req)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("llm http %d", resp.StatusCode)
+		return "", "", fmt.Errorf("llm http %d", resp.StatusCode)
 	}
 
 	var cr chatResp
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if len(cr.Choices) == 0 {
-		return "Uncategorized", nil
+		return "Uncategorized", "", nil
 	}
-	answer := strings.Trim(strings.TrimSpace(cr.Choices[0].Message.Content), `"'.`)
+
+	answer, reason := parseClassifyContent(cr.Choices[0].Message.Content)
 	for _, c := range categories {
 		if strings.EqualFold(answer, c) {
-			return c, nil
+			return c, reason, nil
 		}
 	}
-	return "Uncategorized", nil
+	return "Uncategorized", reason, nil
+}
+
+// parseClassifyContent extracts the category and reason from the LLM's reply.
+// It expects {"category":"...","reason":"..."}, optionally wrapped in a
+// ```json ... ``` fence, but falls back to treating the raw trimmed content
+// as a bare category name (with no reason) if the model didn't follow the
+// JSON instruction.
+func parseClassifyContent(content string) (category string, reason string) {
+	trimmed := strings.TrimSpace(content)
+	trimmed = strings.TrimPrefix(trimmed, "```json")
+	trimmed = strings.TrimPrefix(trimmed, "```")
+	trimmed = strings.TrimSuffix(trimmed, "```")
+	trimmed = strings.TrimSpace(trimmed)
+
+	var cr classifyResponse
+	if err := json.Unmarshal([]byte(trimmed), &cr); err == nil && cr.Category != "" {
+		return cr.Category, cr.Reason
+	}
+	return strings.Trim(strings.TrimSpace(content), `"'.`), ""
 }
