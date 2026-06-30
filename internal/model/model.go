@@ -16,6 +16,7 @@ type Transaction struct {
 	ExchangeRate     *float64 `json:"exchange_rate"`
 	CategoryID       *int64   `json:"category_id"`
 	CategorizedBy    string   `json:"categorized_by"`
+	CategoryName     string   `json:"category_name"`
 	DedupeHash       string   `json:"-"`
 }
 

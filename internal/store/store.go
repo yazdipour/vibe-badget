@@ -25,7 +25,7 @@ func (s *Store) ActiveRules() ([]model.Rule, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []model.Rule
+	out := make([]model.Rule, 0)
 	for rows.Next() {
 		var r model.Rule
 		if err := rows.Scan(&r.ID, &r.Field, &r.MatchType, &r.Pattern, &r.CategoryID); err != nil {
@@ -43,7 +43,7 @@ func (s *Store) UncategorizedTransactions() ([]model.Transaction, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []model.Transaction
+	out := make([]model.Transaction, 0)
 	for rows.Next() {
 		var t model.Transaction
 		if err := rows.Scan(&t.ID, &t.PartnerName, &t.PartnerIban, &t.Type, &t.PaymentReference); err != nil {
@@ -86,7 +86,7 @@ func (s *Store) ListAccounts() ([]model.Account, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []model.Account
+	out := make([]model.Account, 0)
 	for rows.Next() {
 		var a model.Account
 		if err := rows.Scan(&a.ID, &a.Name); err != nil {
@@ -114,16 +114,14 @@ func (s *Store) ListTransactions(accountID int64) ([]model.Transaction, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []model.Transaction
+	out := make([]model.Transaction, 0)
 	for rows.Next() {
 		var t model.Transaction
-		var catName string
 		if err := rows.Scan(&t.ID, &t.AccountID, &t.BookingDate, &t.PartnerName,
 			&t.PartnerIban, &t.Type, &t.PaymentReference, &t.AmountEUR,
-			&t.CategorizedBy, &catName); err != nil {
+			&t.CategorizedBy, &t.CategoryName); err != nil {
 			return nil, err
 		}
-		t.AccountName = catName // reuse: stash category name for the API row
 		out = append(out, t)
 	}
 	return out, rows.Err()
@@ -135,7 +133,7 @@ func (s *Store) ListCategories() ([]model.Category, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []model.Category
+	out := make([]model.Category, 0)
 	for rows.Next() {
 		var c model.Category
 		if err := rows.Scan(&c.ID, &c.Name); err != nil {

@@ -4,7 +4,7 @@ export type Rule = { id: number; field: string; match_type: string; pattern: str
 export type Tx = {
   id: number; account_id: number; booking_date: string; partner_name: string;
   partner_iban: string; type: string; payment_reference: string;
-  amount_eur: number; categorized_by: string; account_name: string;
+  amount_eur: number; categorized_by: string; account_name: string; category_name: string;
 };
 
 async function j<T>(r: Response): Promise<T> {

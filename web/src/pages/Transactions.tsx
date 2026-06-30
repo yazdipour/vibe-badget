@@ -44,8 +44,8 @@ export default function Transactions() {
                 {t.amount_eur.toFixed(2)} €
               </TableCell>
               <TableCell>
-                {t.account_name
-                  ? <Badge variant={t.categorized_by === "llm" ? "secondary" : "default"}>{t.account_name}</Badge>
+                {t.category_name
+                  ? <Badge variant={t.categorized_by === "llm" ? "secondary" : "default"}>{t.category_name}</Badge>
                   : <span className="text-muted-foreground">—</span>}
               </TableCell>
             </TableRow>
