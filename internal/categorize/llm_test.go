@@ -74,3 +74,44 @@ func TestClassifyUnknownFallsBack(t *testing.T) {
 		t.Fatalf("want Uncategorized, got %q err %v", cat, err)
 	}
 }
+
+func TestPingOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"id": "gemma3:12b"}, {"id": "llama3.1"}},
+		})
+	}))
+	defer srv.Close()
+
+	llm := NewLLM(LLMConfig{BaseURL: srv.URL, Model: "gemma3:12b"})
+	res := llm.Ping(context.Background())
+	if res.Status != "ok" {
+		t.Fatalf("want ok, got %+v", res)
+	}
+}
+
+func TestPingModelNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{"id": "llama3.1"}},
+		})
+	}))
+	defer srv.Close()
+
+	llm := NewLLM(LLMConfig{BaseURL: srv.URL, Model: "gemma3:12b"})
+	res := llm.Ping(context.Background())
+	if res.Status != "model_not_found" {
+		t.Fatalf("want model_not_found, got %+v", res)
+	}
+}
+
+func TestPingUnreachable(t *testing.T) {
+	llm := NewLLM(LLMConfig{BaseURL: "http://127.0.0.1:1", Model: "gemma3:12b"})
+	res := llm.Ping(context.Background())
+	if res.Status != "unreachable" {
+		t.Fatalf("want unreachable, got %+v", res)
+	}
+}

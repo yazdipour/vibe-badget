@@ -115,3 +115,54 @@ func parseClassifyContent(content string) (category string, reason string) {
 	}
 	return strings.Trim(strings.TrimSpace(content), `"'.`), ""
 }
+
+type PingResult struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+type modelsResponse struct {
+	Data []struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// Ping checks whether the configured LLM server is reachable and whether the
+// configured model is present in its model list.
+func (l *LLM) Ping(ctx context.Context) PingResult {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	url := strings.TrimRight(l.cfg.BaseURL, "/") + "/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return PingResult{Status: "unreachable", Message: err.Error()}
+	}
+	if l.cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+l.cfg.APIKey)
+	}
+
+	resp, err := l.hc.Do(req)
+	if err != nil {
+		return PingResult{Status: "unreachable", Message: err.Error()}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return PingResult{Status: "unreachable", Message: fmt.Sprintf("http %d", resp.StatusCode)}
+	}
+
+	var mr modelsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&mr); err != nil {
+		return PingResult{Status: "unreachable", Message: err.Error()}
+	}
+
+	for _, m := range mr.Data {
+		if m.ID == l.cfg.Model {
+			return PingResult{Status: "ok", Message: fmt.Sprintf("%d models available", len(mr.Data))}
+		}
+	}
+	return PingResult{
+		Status:  "model_not_found",
+		Message: fmt.Sprintf("model not in server's list (%d available)", len(mr.Data)),
+	}
+}
