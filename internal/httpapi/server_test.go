@@ -48,3 +48,23 @@ func TestUploadAndList(t *testing.T) {
 	}
 	_ = http.StatusOK
 }
+
+func TestRulesCRUDAndCategorize(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	h := NewServer(store.New(d), nil, os.DirFS("."))
+
+	// list seeded rules
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/rules", nil))
+	if rec.Code != 200 || !bytes.Contains(rec.Body.Bytes(), []byte("Lidl")) {
+		t.Fatalf("rules list: %d %s", rec.Code, rec.Body)
+	}
+
+	// categorize with no LLM still applies rules and returns 200
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest("POST", "/api/categorize", nil))
+	if rec2.Code != 200 {
+		t.Fatalf("categorize: %d %s", rec2.Code, rec2.Body)
+	}
+}

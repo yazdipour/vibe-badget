@@ -1,0 +1,31 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+func (s *Server) listCategories(w http.ResponseWriter, r *http.Request) {
+	cats, err := s.store.ListCategories()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, 200, cats)
+}
+
+func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
+		http.Error(w, "name required", 400)
+		return
+	}
+	c, err := s.store.CreateCategory(in.Name)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, 201, c)
+}

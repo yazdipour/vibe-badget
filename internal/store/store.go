@@ -129,6 +129,45 @@ func (s *Store) ListTransactions(accountID int64) ([]model.Transaction, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) ListCategories() ([]model.Category, error) {
+	rows, err := s.db.Query(`SELECT id,name FROM categories ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.Category
+	for rows.Next() {
+		var c model.Category
+		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CreateCategory(name string) (model.Category, error) {
+	var c model.Category
+	err := s.db.QueryRow(
+		`INSERT INTO categories(name) VALUES(?) ON CONFLICT(name) DO UPDATE SET name=excluded.name RETURNING id,name`,
+		name).Scan(&c.ID, &c.Name)
+	return c, err
+}
+
+func (s *Store) ListRules() ([]model.Rule, error) { return s.ActiveRules() }
+
+func (s *Store) CreateRule(r model.Rule) (model.Rule, error) {
+	err := s.db.QueryRow(
+		`INSERT INTO rules(field,match_type,pattern,category_id) VALUES(?,?,?,?) RETURNING id`,
+		r.Field, r.MatchType, r.Pattern, r.CategoryID).Scan(&r.ID)
+	return r, err
+}
+
+func (s *Store) DeleteRule(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM rules WHERE id=?`, id)
+	return err
+}
+
 func (s *Store) InsertTransactions(txns []model.Transaction) (int, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
