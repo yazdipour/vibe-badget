@@ -84,10 +84,19 @@ func TestRulesCRUDAndCategorize(t *testing.T) {
 		t.Fatalf("rules list: %d %s", rec.Code, rec.Body)
 	}
 
-	// categorize with no LLM still applies rules and returns 200
+	// categorize with no LLM still applies rules and returns 200 with a log array
 	rec2 := httptest.NewRecorder()
 	h.ServeHTTP(rec2, httptest.NewRequest("POST", "/api/categorize", nil))
 	if rec2.Code != 200 {
 		t.Fatalf("categorize: %d %s", rec2.Code, rec2.Body)
+	}
+	var result struct {
+		Log []map[string]any `json:"log"`
+	}
+	if err := json.Unmarshal(rec2.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode categorize response: %v body=%s", err, rec2.Body)
+	}
+	if result.Log == nil {
+		t.Fatalf("expected non-nil log array, got null: %s", rec2.Body)
 	}
 }
