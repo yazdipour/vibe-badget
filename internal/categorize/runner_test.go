@@ -11,9 +11,9 @@ import (
 
 type fakeLLM struct{ called int }
 
-func (f *fakeLLM) Classify(_ context.Context, partner string, _ []string) (string, error) {
+func (f *fakeLLM) Classify(_ context.Context, partner string, _ []string) (string, string, error) {
 	f.called++
-	return "Transport", nil // pretend the model always says Transport
+	return "Transport", "looks like a taxi service", nil
 }
 
 func TestRunRulesThenLLM(t *testing.T) {
@@ -43,5 +43,50 @@ func TestRunRulesThenLLM(t *testing.T) {
 	d.QueryRow(`SELECT count(*) FROM transactions WHERE category_id IS NULL`).Scan(&remaining)
 	if remaining != 0 {
 		t.Fatalf("want 0 uncategorized, got %d", remaining)
+	}
+
+	if len(res.Log) != 2 {
+		t.Fatalf("want 2 log entries, got %d: %+v", len(res.Log), res.Log)
+	}
+	var sawRule, sawLLM bool
+	for _, e := range res.Log {
+		switch e.Source {
+		case "rule":
+			sawRule = true
+			if e.Partner != "LIDL DANKT" || e.Category != "Groceries" || e.Reason == "" {
+				t.Fatalf("bad rule log entry: %+v", e)
+			}
+		case "llm":
+			sawLLM = true
+			if e.Partner != "Mystery Cab Co" || e.Category != "Transport" || e.Reason != "looks like a taxi service" {
+				t.Fatalf("bad llm log entry: %+v", e)
+			}
+		default:
+			t.Fatalf("unexpected log source: %+v", e)
+		}
+	}
+	if !sawRule || !sawLLM {
+		t.Fatalf("missing expected log sources: %+v", res.Log)
+	}
+}
+
+func TestRunSkippedWithoutLLM(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	s := store.New(d)
+
+	_, err := s.InsertTransactions([]model.Transaction{
+		{AccountName: "Main", PartnerName: "Mystery Cab Co", DedupeHash: "b"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Run(context.Background(), s, nil, 4)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Skipped != 1 || len(res.Log) != 1 || res.Log[0].Source != "skipped" {
+		t.Fatalf("unexpected result %+v", res)
 	}
 }
