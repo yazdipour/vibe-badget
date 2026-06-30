@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type LLMHealth } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+
+function healthVariant(status: string): "default" | "destructive" | "outline" {
+  if (status === "ok") return "default";
+  if (status === "unconfigured") return "outline";
+  return "destructive";
+}
 
 export default function Settings() {
   const [s, setS] = useState<Record<string, string>>({
@@ -12,12 +19,32 @@ export default function Settings() {
     llm_concurrency: "4",
     llm_api_key: "",
   });
+  const [health, setHealth] = useState<LLMHealth | null>(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => { api.getSettings().then((v) => setS((p) => ({ ...p, ...v, llm_api_key: "" }))); }, []);
 
+  async function checkHealth() {
+    setChecking(true);
+    try {
+      const h = await api.llmHealth();
+      setHealth(h);
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setChecking(false);
+    }
+  }
+  useEffect(() => { checkHealth(); }, []);
+
   async function save() {
-    try { await api.putSettings(s); toast.success("Saved"); }
-    catch (e) { toast.error(String(e)); }
+    try {
+      await api.putSettings(s);
+      toast.success("Saved");
+      checkHealth();
+    } catch (e) {
+      toast.error(String(e));
+    }
   }
 
   const field = (key: string, label: string, placeholder = "") => (
@@ -37,6 +64,18 @@ export default function Settings() {
         {field("llm_api_key", "API key (leave blank to keep current)")}
         {field("llm_concurrency", "Parallel workers")}
         <Button onClick={save}>Save</Button>
+
+        <div className="flex items-center gap-2 border-t pt-4">
+          {checking ? (
+            <span className="text-sm text-muted-foreground">Checking…</span>
+          ) : health ? (
+            <>
+              <Badge variant={healthVariant(health.status)}>{health.status}</Badge>
+              <span className="text-sm text-muted-foreground">{health.message}</span>
+            </>
+          ) : null}
+          <Button size="sm" variant="ghost" onClick={checkHealth} disabled={checking}>Recheck</Button>
+        </div>
       </CardContent>
     </Card>
   );

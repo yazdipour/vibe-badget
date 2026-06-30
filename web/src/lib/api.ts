@@ -4,6 +4,7 @@ export type Rule = { id: number; field: string; match_type: string; pattern: str
 export type CategorizeLogEntry = {
   tx_id: number; partner: string; category: string; source: string; reason: string;
 };
+export type LLMHealth = { status: string; message: string };
 export type Tx = {
   id: number; account_id: number; booking_date: string; partner_name: string;
   partner_iban: string; type: string; payment_reference: string;
@@ -35,6 +36,7 @@ export const api = {
     fetch("/api/rules", { method: "POST", body: JSON.stringify(r), headers: { "Content-Type": "application/json" } }).then(j<Rule>),
   deleteRule: (id: number) => fetch(`/api/rules/${id}`, { method: "DELETE" }).then(j<void>),
   getSettings: () => fetch("/api/settings").then(j<Record<string, string>>),
+  llmHealth: () => fetch("/api/llm/health").then(j<LLMHealth>),
   putSettings: (kv: Record<string, string>) =>
     fetch("/api/settings", { method: "PUT", body: JSON.stringify(kv), headers: { "Content-Type": "application/json" } }).then(j<void>),
 };
