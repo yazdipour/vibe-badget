@@ -25,6 +25,7 @@ export const api = {
       method: "PUT", body: JSON.stringify({ category_id: categoryId }),
       headers: { "Content-Type": "application/json" },
     }).then(j<void>),
+  deleteTransaction: (id: number) => fetch(`/api/transactions/${id}`, { method: "DELETE" }).then(j<void>),
   upload: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);

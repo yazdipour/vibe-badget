@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { api, type Account, type Category, type Tx } from "@/lib/api";
 import { filterTxns } from "@/lib/transactions";
 import { formatEUR } from "@/lib/format";
@@ -7,8 +8,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 function categoryVariant(by: string): "default" | "secondary" | "outline" {
@@ -24,6 +29,7 @@ export default function Transactions() {
   const [rows, setRows] = useState<Tx[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [deleteTarget, setDeleteTarget] = useState<Tx | null>(null);
 
   useEffect(() => {
     api.accounts().then(setAccounts);
@@ -47,6 +53,17 @@ export default function Transactions() {
           ? { ...t, category_name: category?.name ?? "", categorized_by: "manual" }
           : t,
       ));
+    } catch (e) {
+      toast.error(String(e));
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    try {
+      await api.deleteTransaction(deleteTarget.id);
+      setRows((prev) => prev.filter((t) => t.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (e) {
       toast.error(String(e));
     }
@@ -89,6 +106,7 @@ export default function Transactions() {
             <TableHead>Reference</TableHead>
             <TableHead className="w-32 text-right">Amount</TableHead>
             <TableHead className="w-40">Category</TableHead>
+            <TableHead className="w-12" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -128,10 +146,30 @@ export default function Transactions() {
                   </Select>
                 )}
               </TableCell>
+              <TableCell>
+                <Button variant="ghost" size="icon-sm" onClick={() => setDeleteTarget(t)}>
+                  <Trash2 size={14} />
+                </Button>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Delete this transaction?</DialogTitle></DialogHeader>
+          {deleteTarget && (
+            <p className="text-sm text-muted-foreground">
+              {deleteTarget.booking_date} · {deleteTarget.partner_name} · {formatEUR(deleteTarget.amount_eur)}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
