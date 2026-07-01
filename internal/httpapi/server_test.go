@@ -84,20 +84,27 @@ func TestRulesCRUDAndCategorize(t *testing.T) {
 		t.Fatalf("rules list: %d %s", rec.Code, rec.Body)
 	}
 
-	// categorize with no LLM still applies rules and returns 200 with a log array
+	// categorize with no LLM still applies rules and streams NDJSON ending in a done line
 	rec2 := httptest.NewRecorder()
 	h.ServeHTTP(rec2, httptest.NewRequest("POST", "/api/categorize", nil))
 	if rec2.Code != 200 {
 		t.Fatalf("categorize: %d %s", rec2.Code, rec2.Body)
 	}
-	var result struct {
-		Log []map[string]any `json:"log"`
+	if ct := rec2.Header().Get("Content-Type"); ct != "application/x-ndjson" {
+		t.Fatalf("want ndjson content-type, got %q", ct)
 	}
-	if err := json.Unmarshal(rec2.Body.Bytes(), &result); err != nil {
-		t.Fatalf("decode categorize response: %v body=%s", err, rec2.Body)
+	lines := bytes.Split(bytes.TrimSpace(rec2.Body.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatalf("expected at least one line, got none: %s", rec2.Body)
 	}
-	if result.Log == nil {
-		t.Fatalf("expected non-nil log array, got null: %s", rec2.Body)
+	var last struct {
+		Done bool `json:"done"`
+	}
+	if err := json.Unmarshal(lines[len(lines)-1], &last); err != nil {
+		t.Fatalf("decode last line: %v line=%s", err, lines[len(lines)-1])
+	}
+	if !last.Done {
+		t.Fatalf("last line should have done=true, got %s", lines[len(lines)-1])
 	}
 }
 

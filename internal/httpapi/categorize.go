@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -9,19 +9,41 @@ import (
 )
 
 func (s *Server) categorize(w http.ResponseWriter, r *http.Request) {
-	res, err := s.runCategorize(r.Context())
+	kv, err := s.store.GetSettings()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	writeJSON(w, 200, res)
+	llm, concurrency := buildClassifier(kv)
+
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	flusher, _ := w.(http.Flusher)
+	enc := json.NewEncoder(w)
+
+	onEntry := func(e categorize.LogEntry) {
+		enc.Encode(e)
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	res, err := categorize.Run(r.Context(), s.store, llm, concurrency, onEntry)
+	if err != nil {
+		enc.Encode(map[string]any{"done": true, "error": err.Error()})
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return
+	}
+	enc.Encode(map[string]any{
+		"done": true, "rules": res.Rules, "llm": res.LLM, "skipped": res.Skipped,
+	})
+	if flusher != nil {
+		flusher.Flush()
+	}
 }
 
-func (s *Server) runCategorize(ctx context.Context) (categorize.Result, error) {
-	kv, err := s.store.GetSettings()
-	if err != nil {
-		return categorize.Result{}, err
-	}
+func buildClassifier(kv map[string]string) (categorize.Classifier, int) {
 	concurrency := 4
 	if n, err := strconv.Atoi(kv["llm_concurrency"]); err == nil && n > 0 {
 		concurrency = n
@@ -34,5 +56,5 @@ func (s *Server) runCategorize(ctx context.Context) (categorize.Result, error) {
 			Model:   kv["llm_model"],
 		})
 	}
-	return categorize.Run(ctx, s.store, llm, concurrency)
+	return llm, concurrency
 }
