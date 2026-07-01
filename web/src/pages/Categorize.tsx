@@ -52,10 +52,35 @@ export default function Categorize() {
 
   async function run() {
     setBusy(true);
+    setLog([]);
     try {
-      const r = await api.categorize();
-      toast.success(`Rules: ${r.rules}, LLM: ${r.llm}, Skipped: ${r.skipped}`);
-      setLog(r.log);
+      const resp = await fetch("/api/categorize", { method: "POST" });
+      if (!resp.ok || !resp.body) {
+        throw new Error(await resp.text());
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const parsed = JSON.parse(line);
+          if (parsed.done) {
+            if (parsed.error) {
+              toast.error(parsed.error);
+            } else {
+              toast.success(`Rules: ${parsed.rules}, LLM: ${parsed.llm}, Skipped: ${parsed.skipped}`);
+            }
+          } else {
+            setLog((prev) => [...(prev ?? []), parsed as CategorizeLogEntry]);
+          }
+        }
+      }
       reload();
     } catch (e) {
       toast.error(String(e));

@@ -25,9 +25,6 @@ export const api = {
     fd.append("file", file);
     return fetch("/api/upload", { method: "POST", body: fd }).then(j<{ inserted: number }>);
   },
-  categorize: () => fetch("/api/categorize", { method: "POST" }).then(
-    j<{ rules: number; llm: number; skipped: number; log: CategorizeLogEntry[] }>,
-  ),
   categories: () => fetch("/api/categories").then(j<Category[]>),
   createCategory: (name: string) =>
     fetch("/api/categories", { method: "POST", body: JSON.stringify({ name }), headers: { "Content-Type": "application/json" } }).then(j<Category>),
