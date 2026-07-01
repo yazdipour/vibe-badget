@@ -2,6 +2,7 @@ package categorize
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/sh-yazdipour/vibe-badget/internal/db"
@@ -31,7 +32,15 @@ func TestRunRulesThenLLM(t *testing.T) {
 	}
 
 	f := &fakeLLM{}
-	res, err := Run(context.Background(), s, f, 4)
+	var mu sync.Mutex
+	var streamed []LogEntry
+	onEntry := func(e LogEntry) {
+		mu.Lock()
+		defer mu.Unlock()
+		streamed = append(streamed, e)
+	}
+
+	res, err := Run(context.Background(), s, f, 4, onEntry)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -47,6 +56,9 @@ func TestRunRulesThenLLM(t *testing.T) {
 
 	if len(res.Log) != 2 {
 		t.Fatalf("want 2 log entries, got %d: %+v", len(res.Log), res.Log)
+	}
+	if len(streamed) != len(res.Log) {
+		t.Fatalf("onEntry callback count %d != res.Log count %d", len(streamed), len(res.Log))
 	}
 	var sawRule, sawLLM bool
 	for _, e := range res.Log {
@@ -82,7 +94,7 @@ func TestRunSkippedWithoutLLM(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := Run(context.Background(), s, nil, 4)
+	res, err := Run(context.Background(), s, nil, 4, nil)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}

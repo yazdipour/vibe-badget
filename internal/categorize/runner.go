@@ -30,8 +30,18 @@ type Result struct {
 
 // Run applies rules to every uncategorized transaction, then sends whatever
 // is left to the LLM through a bounded worker pool of size `concurrency`.
-func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (Result, error) {
+// onEntry, if non-nil, is called once per transaction the instant it's
+// resolved (rule match, LLM result, or skip), in addition to being recorded
+// in the returned Result.Log — used to stream progress to a caller.
+func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int, onEntry func(LogEntry)) (Result, error) {
 	res := Result{Log: []LogEntry{}}
+	var mu sync.Mutex
+	record := func(e LogEntry) {
+		res.Log = append(res.Log, e)
+		if onEntry != nil {
+			onEntry(e)
+		}
+	}
 
 	rules, err := s.ActiveRules()
 	if err != nil {
@@ -50,7 +60,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 		return res, err
 	}
 
-	// Pass 1: rules (cheap, sequential).
+	// Pass 1: rules (cheap, sequential — no locking needed here).
 	var forLLM []int64
 	partnerOf := map[int64]string{}
 	for _, t := range txns {
@@ -59,7 +69,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 				return res, err
 			}
 			res.Rules++
-			res.Log = append(res.Log, LogEntry{
+			record(LogEntry{
 				TxID: t.ID, Partner: t.PartnerName, Category: idToName[catID],
 				Source: "rule", Reason: "matched rule",
 			})
@@ -72,7 +82,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 	if llm == nil || concurrency < 1 {
 		res.Skipped += len(forLLM)
 		for _, id := range forLLM {
-			res.Log = append(res.Log, LogEntry{
+			record(LogEntry{
 				TxID: id, Partner: partnerOf[id], Source: "skipped", Reason: "no LLM configured",
 			})
 		}
@@ -82,7 +92,6 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 	// Pass 2: LLM in parallel.
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
-	var mu sync.Mutex
 	for _, id := range forLLM {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -95,7 +104,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 			defer mu.Unlock()
 			if cerr != nil {
 				res.Skipped++
-				res.Log = append(res.Log, LogEntry{
+				record(LogEntry{
 					TxID: txID, Partner: partnerOf[txID], Source: "skipped", Reason: cerr.Error(),
 				})
 				return
@@ -106,7 +115,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 				if skipReason == "" {
 					skipReason = "LLM returned Uncategorized"
 				}
-				res.Log = append(res.Log, LogEntry{
+				record(LogEntry{
 					TxID: txID, Partner: partnerOf[txID], Source: "skipped", Reason: skipReason,
 				})
 				return
@@ -114,7 +123,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 			if catID, ok := byName[name]; ok {
 				if err := s.SetCategory(txID, catID, "llm"); err == nil {
 					res.LLM++
-					res.Log = append(res.Log, LogEntry{
+					record(LogEntry{
 						TxID: txID, Partner: partnerOf[txID], Category: name,
 						Source: "llm", Reason: reason,
 					})
@@ -122,7 +131,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int) (
 				}
 			}
 			res.Skipped++
-			res.Log = append(res.Log, LogEntry{
+			record(LogEntry{
 				TxID: txID, Partner: partnerOf[txID], Source: "skipped", Reason: "unknown category returned: " + name,
 			})
 		}(id)
