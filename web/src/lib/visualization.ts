@@ -50,6 +50,6 @@ export function categoryTotals(txns: Tx[], sign: "income" | "expense"): Category
     byCategory.set(name, (byCategory.get(name) ?? 0) + Math.abs(t.amount_eur));
   }
   return [...byCategory.entries()]
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
     .sort((a, b) => b.value - a.value);
 }

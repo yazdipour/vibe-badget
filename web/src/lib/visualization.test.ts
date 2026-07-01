@@ -105,3 +105,16 @@ test("categoryTotals: income sign only includes positive amounts", () => {
   const result = categoryTotals(txns, "income");
   assert.deepEqual(result, [{ name: "Salary", value: 500 }]);
 });
+
+test("categoryTotals: rounds away floating-point drift from repeated addition", () => {
+  const txns: Tx[] = [];
+  // 0.1 + 0.2 repeated many times accumulates float drift in plain JS addition
+  for (let i = 0; i < 20; i++) {
+    txns.push(mkTx({ id: i, amount_eur: -0.1, category_name: "Misc" }));
+    txns.push(mkTx({ id: 100 + i, amount_eur: -0.2, category_name: "Misc" }));
+  }
+  const result = categoryTotals(txns, "expense");
+  assert.equal(result.length, 1);
+  // 20*(0.1+0.2) = 6 exactly; without rounding this would be something like 5.999999999999999
+  assert.equal(result[0].value, 6);
+});
