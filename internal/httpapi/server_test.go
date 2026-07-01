@@ -199,3 +199,43 @@ func TestSetTransactionCategory(t *testing.T) {
 		t.Fatalf("expected categorized_by manual in response: %s", rec4.Body)
 	}
 }
+
+func TestCreateCategoryWithAndWithoutIconColor(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	h := NewServer(store.New(d), os.DirFS("."))
+
+	// with icon/color
+	req := httptest.NewRequest("POST", "/api/categories",
+		bytes.NewBufferString(`{"name":"Pets","icon":"PiggyBank","color":"#f59e0b"}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 201 {
+		t.Fatalf("create with icon/color: %d %s", rec.Code, rec.Body)
+	}
+	var withIcon struct {
+		Icon  string `json:"icon"`
+		Color string `json:"color"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &withIcon)
+	if withIcon.Icon != "PiggyBank" || withIcon.Color != "#f59e0b" {
+		t.Fatalf("unexpected response: %s", rec.Body)
+	}
+
+	// without icon/color -> defaults apply
+	req2 := httptest.NewRequest("POST", "/api/categories",
+		bytes.NewBufferString(`{"name":"Bare"}`))
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req2)
+	if rec2.Code != 201 {
+		t.Fatalf("create without icon/color: %d %s", rec2.Code, rec2.Body)
+	}
+	var withoutIcon struct {
+		Icon  string `json:"icon"`
+		Color string `json:"color"`
+	}
+	json.Unmarshal(rec2.Body.Bytes(), &withoutIcon)
+	if withoutIcon.Icon != "Tag" || withoutIcon.Color != "#6b7280" {
+		t.Fatalf("unexpected default response: %s", rec2.Body)
+	}
+}
