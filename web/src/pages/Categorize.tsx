@@ -29,11 +29,11 @@ export default function Categorize() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<CategorizeLogEntry[] | null>(null);
-  const [newCategory, setNewCategory] = useState<{ name: string; icon: string; color: string }>(
-    { name: "", icon: CATEGORY_ICONS[0], color: PALETTE[0] },
+  const [newCategory, setNewCategory] = useState<{ name: string; icon: string; color: string; iconColor: string }>(
+    { name: "", icon: CATEGORY_ICONS[0], color: PALETTE[0], iconColor: readableTextColor(PALETTE[0]) },
   );
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<{ icon: string; color: string } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ icon: string; color: string; iconColor: string } | null>(null);
   const [newRule, setNewRule] = useState({ field: "partner_name", match_type: "keyword", pattern: "" });
 
   const reload = () => {
@@ -64,8 +64,11 @@ export default function Categorize() {
   async function createCategory() {
     if (!newCategory.name.trim()) { toast.error("name required"); return; }
     try {
-      await api.createCategory(newCategory);
-      setNewCategory({ name: "", icon: CATEGORY_ICONS[0], color: PALETTE[0] });
+      await api.createCategory({
+        name: newCategory.name, icon: newCategory.icon, color: newCategory.color,
+        icon_color: newCategory.iconColor,
+      });
+      setNewCategory({ name: "", icon: CATEGORY_ICONS[0], color: PALETTE[0], iconColor: readableTextColor(PALETTE[0]) });
       api.categories().then(setCategories);
     } catch (e) {
       toast.error(String(e));
@@ -95,7 +98,9 @@ export default function Categorize() {
   async function saveCategoryAppearance(id: number) {
     if (!editDraft) return;
     try {
-      const updated = await api.updateCategoryAppearance(id, editDraft);
+      const updated = await api.updateCategoryAppearance(id, {
+        icon: editDraft.icon, color: editDraft.color, icon_color: editDraft.iconColor,
+      });
       setCategories((prev) => prev.map((c) => (c.id === id ? updated : c)));
     } catch (e) {
       toast.error(String(e));
@@ -162,13 +167,13 @@ export default function Categorize() {
                         setEditDraft(null);
                       } else {
                         setExpandedCategory(c.id);
-                        setEditDraft({ icon: c.icon, color: c.color });
+                        setEditDraft({ icon: c.icon, color: c.color, iconColor: c.icon_color });
                       }
                     }}
                   >
                     <span
                       className="flex size-6 items-center justify-center rounded-full"
-                      style={{ backgroundColor: c.color, color: readableTextColor(c.color) }}
+                      style={{ backgroundColor: c.color, color: c.icon_color }}
                     >
                       <Icon size={14} />
                     </span>
@@ -203,7 +208,7 @@ export default function Categorize() {
                               );
                             })}
                           </div>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap items-center gap-1">
                             {PALETTE.map((color) => {
                               const selected = editDraft.color === color;
                               return (
@@ -212,10 +217,33 @@ export default function Categorize() {
                                   type="button"
                                   className={`size-8 rounded-full ${selected ? "ring-2 ring-offset-2 ring-foreground" : ""}`}
                                   style={{ backgroundColor: color }}
-                                  onClick={() => setEditDraft({ ...editDraft, color })}
+                                  onClick={() => setEditDraft({ ...editDraft, color, iconColor: readableTextColor(color) })}
                                 />
                               );
                             })}
+                            <input
+                              type="color"
+                              className="size-8 cursor-pointer rounded-full border border-input p-0"
+                              value={editDraft.color}
+                              onChange={(e) => setEditDraft({ ...editDraft, color: e.target.value, iconColor: readableTextColor(e.target.value) })}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Icon color:</span>
+                            <button
+                              type="button"
+                              className={`rounded-lg border px-2 py-1 text-xs ${editDraft.iconColor === "#000000" ? "border-foreground" : "border-input"}`}
+                              onClick={() => setEditDraft({ ...editDraft, iconColor: "#000000" })}
+                            >
+                              Black
+                            </button>
+                            <button
+                              type="button"
+                              className={`rounded-lg border px-2 py-1 text-xs ${editDraft.iconColor === "#ffffff" ? "border-foreground" : "border-input"}`}
+                              onClick={() => setEditDraft({ ...editDraft, iconColor: "#ffffff" })}
+                            >
+                              White
+                            </button>
                           </div>
                           <Button size="sm" onClick={() => saveCategoryAppearance(c.id)}>Save</Button>
                         </div>
@@ -273,7 +301,7 @@ export default function Categorize() {
                 );
               })}
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {PALETTE.map((color) => {
                 const selected = newCategory.color === color;
                 return (
@@ -282,10 +310,33 @@ export default function Categorize() {
                     type="button"
                     className={`size-8 rounded-full ${selected ? "ring-2 ring-offset-2 ring-foreground" : ""}`}
                     style={{ backgroundColor: color }}
-                    onClick={() => setNewCategory({ ...newCategory, color })}
+                    onClick={() => setNewCategory({ ...newCategory, color, iconColor: readableTextColor(color) })}
                   />
                 );
               })}
+              <input
+                type="color"
+                className="size-8 cursor-pointer rounded-full border border-input p-0"
+                value={newCategory.color}
+                onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value, iconColor: readableTextColor(e.target.value) })}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Icon color:</span>
+              <button
+                type="button"
+                className={`rounded-lg border px-2 py-1 text-xs ${newCategory.iconColor === "#000000" ? "border-foreground" : "border-input"}`}
+                onClick={() => setNewCategory({ ...newCategory, iconColor: "#000000" })}
+              >
+                Black
+              </button>
+              <button
+                type="button"
+                className={`rounded-lg border px-2 py-1 text-xs ${newCategory.iconColor === "#ffffff" ? "border-foreground" : "border-input"}`}
+                onClick={() => setNewCategory({ ...newCategory, iconColor: "#ffffff" })}
+              >
+                White
+              </button>
             </div>
             <Button onClick={createCategory}>Create category</Button>
           </div>

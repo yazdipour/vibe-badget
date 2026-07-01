@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PALETTE, readableTextColor } from "./colors.ts";
 
-test("PALETTE has 10 distinct hex colors", () => {
-  assert.equal(PALETTE.length, 10);
-  assert.equal(new Set(PALETTE).size, 10);
+test("PALETTE has at least 20 distinct hex colors", () => {
+  assert.ok(PALETTE.length >= 20);
+  assert.equal(new Set(PALETTE).size, PALETTE.length);
   for (const c of PALETTE) {
     assert.match(c, /^#[0-9a-f]{6}$/i);
   }

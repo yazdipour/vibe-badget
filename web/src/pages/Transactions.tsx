@@ -3,7 +3,6 @@ import { api, type Account, type Category, type Tx } from "@/lib/api";
 import { filterTxns } from "@/lib/transactions";
 import { formatEUR } from "@/lib/format";
 import { resolveIcon } from "@/lib/icons";
-import { readableTextColor } from "@/lib/colors";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -109,10 +108,11 @@ export default function Transactions() {
                     const category = categories.find((c) => c.name === t.category_name);
                     const Icon = resolveIcon(category?.icon ?? "Tag");
                     const bg = category?.color ?? "#6b7280";
+                    const fg = category?.icon_color ?? "#ffffff";
                     return (
                       <Badge
                         variant={categoryVariant(t.categorized_by)}
-                        style={{ backgroundColor: bg, color: readableTextColor(bg), borderColor: "transparent" }}
+                        style={{ backgroundColor: bg, color: fg, borderColor: "transparent" }}
                       >
                         <Icon size={12} />
                         {t.category_name}
