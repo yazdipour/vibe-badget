@@ -71,6 +71,11 @@ func migrateCategoryColumns(d *sql.DB) error {
 			return err
 		}
 	}
+	if !existing["icon_color"] {
+		if _, err := d.Exec(`ALTER TABLE categories ADD COLUMN icon_color TEXT NOT NULL DEFAULT '#ffffff'`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

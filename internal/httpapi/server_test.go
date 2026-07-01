@@ -258,19 +258,20 @@ func TestUpdateCategoryAppearance(t *testing.T) {
 	target := cats[0]
 
 	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/categories/%d", target.ID),
-		bytes.NewBufferString(`{"icon":"Zap","color":"#f59e0b"}`))
+		bytes.NewBufferString(`{"icon":"Zap","color":"#f59e0b","icon_color":"#000000"}`))
 	rec2 := httptest.NewRecorder()
 	h.ServeHTTP(rec2, req)
 	if rec2.Code != 200 {
 		t.Fatalf("update: %d %s", rec2.Code, rec2.Body)
 	}
 	var updated struct {
-		Name  string `json:"name"`
-		Icon  string `json:"icon"`
-		Color string `json:"color"`
+		Name      string `json:"name"`
+		Icon      string `json:"icon"`
+		Color     string `json:"color"`
+		IconColor string `json:"icon_color"`
 	}
 	json.Unmarshal(rec2.Body.Bytes(), &updated)
-	if updated.Name != target.Name || updated.Icon != "Zap" || updated.Color != "#f59e0b" {
+	if updated.Name != target.Name || updated.Icon != "Zap" || updated.Color != "#f59e0b" || updated.IconColor != "#000000" {
 		t.Fatalf("unexpected response: %s", rec2.Body)
 	}
 

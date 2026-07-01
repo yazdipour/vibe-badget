@@ -26,10 +26,11 @@ type Account struct {
 }
 
 type Category struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Icon  string `json:"icon"`
-	Color string `json:"color"`
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Icon      string `json:"icon"`
+	Color     string `json:"color"`
+	IconColor string `json:"icon_color"`
 }
 
 type Rule struct {

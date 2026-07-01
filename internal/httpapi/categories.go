@@ -17,9 +17,10 @@ func (s *Server) listCategories(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name  string `json:"name"`
-		Icon  string `json:"icon"`
-		Color string `json:"color"`
+		Name      string `json:"name"`
+		Icon      string `json:"icon"`
+		Color     string `json:"color"`
+		IconColor string `json:"icon_color"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
 		http.Error(w, "name required", 400)
@@ -33,7 +34,11 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 	if color == "" {
 		color = "#6b7280"
 	}
-	c, err := s.store.CreateCategory(in.Name, icon, color)
+	iconColor := in.IconColor
+	if iconColor == "" {
+		iconColor = "#ffffff"
+	}
+	c, err := s.store.CreateCategory(in.Name, icon, color, iconColor)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -48,14 +53,15 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Icon  string `json:"icon"`
-		Color string `json:"color"`
+		Icon      string `json:"icon"`
+		Color     string `json:"color"`
+		IconColor string `json:"icon_color"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Icon == "" || in.Color == "" {
-		http.Error(w, "icon and color required", 400)
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Icon == "" || in.Color == "" || in.IconColor == "" {
+		http.Error(w, "icon, color, and icon_color required", 400)
 		return
 	}
-	c, err := s.store.UpdateCategoryAppearance(id, in.Icon, in.Color)
+	c, err := s.store.UpdateCategoryAppearance(id, in.Icon, in.Color, in.IconColor)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

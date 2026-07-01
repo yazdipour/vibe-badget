@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name       TEXT NOT NULL UNIQUE,
   icon       TEXT NOT NULL DEFAULT 'Tag',
   color      TEXT NOT NULL DEFAULT '#6b7280',
+  icon_color TEXT NOT NULL DEFAULT '#ffffff',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
