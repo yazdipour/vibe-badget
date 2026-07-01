@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Account, type Tx } from "@/lib/api";
 import { filterTransactions, summarize, monthlyTotals, categoryTotals } from "@/lib/visualization";
+import { formatEUR } from "@/lib/format";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -16,11 +17,7 @@ const PIE_COLORS = [
   "#a855f7", "#ec4899", "#84cc16", "#0ea5e9", "#f97316",
 ];
 
-function eur(n: number): string {
-  return `${n.toFixed(2)} €`;
-}
-
-const tooltipFormatter = ((v: number) => eur(v)) as (value: unknown) => string;
+const tooltipFormatter = ((v: number) => formatEUR(v)) as (value: unknown) => string;
 
 export default function Visualization() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -70,16 +67,16 @@ export default function Visualization() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Card>
               <CardHeader><CardTitle>Total Income</CardTitle></CardHeader>
-              <CardContent className="text-2xl font-medium text-green-600">{eur(summary.income)}</CardContent>
+              <CardContent className="text-2xl font-medium text-green-600">{formatEUR(summary.income)}</CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle>Total Expenses</CardTitle></CardHeader>
-              <CardContent className="text-2xl font-medium text-red-600">{eur(-summary.expenses)}</CardContent>
+              <CardContent className="text-2xl font-medium text-red-600">{formatEUR(-summary.expenses)}</CardContent>
             </Card>
             <Card>
               <CardHeader><CardTitle>Net</CardTitle></CardHeader>
               <CardContent className={`text-2xl font-medium ${summary.net >= 0 ? "text-green-600" : "text-red-600"}`}>
-                {eur(summary.net)}
+                {formatEUR(summary.net)}
               </CardContent>
             </Card>
           </div>
