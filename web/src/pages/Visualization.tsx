@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Account, type Tx } from "@/lib/api";
+import { api, type Account, type Category, type Tx } from "@/lib/api";
 import { filterTransactions, summarize, monthlyTotals, categoryTotals } from "@/lib/visualization";
 import { formatEUR } from "@/lib/format";
+import { PALETTE } from "@/lib/colors";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -12,15 +13,11 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 
-const PIE_COLORS = [
-  "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4",
-  "#a855f7", "#ec4899", "#84cc16", "#0ea5e9", "#f97316",
-];
-
 const tooltipFormatter = ((v: number) => formatEUR(v)) as (value: unknown) => string;
 
 export default function Visualization() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [txns, setTxns] = useState<Tx[]>([]);
   const [accountId, setAccountId] = useState("all");
   const [from, setFrom] = useState("");
@@ -29,6 +26,7 @@ export default function Visualization() {
   useEffect(() => {
     api.accounts().then(setAccounts);
     api.transactions().then(setTxns);
+    api.categories().then(setCategories);
   }, []);
 
   const filtered = useMemo(
@@ -39,6 +37,11 @@ export default function Visualization() {
   const months = useMemo(() => monthlyTotals(filtered), [filtered]);
   const expensesByCategory = useMemo(() => categoryTotals(filtered, "expense"), [filtered]);
   const incomeByCategory = useMemo(() => categoryTotals(filtered, "income"), [filtered]);
+
+  const colorForSlice = (name: string, index: number): string => {
+    const category = categories.find((c) => c.name === name);
+    return category?.color ?? PALETTE[index % PALETTE.length];
+  };
 
   return (
     <div className="space-y-6">
@@ -108,8 +111,8 @@ export default function Visualization() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={expensesByCategory} dataKey="value" nameKey="name" outerRadius={100} label>
-                        {expensesByCategory.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        {expensesByCategory.map((slice, i) => (
+                          <Cell key={i} fill={colorForSlice(slice.name, i)} />
                         ))}
                       </Pie>
                       <Tooltip formatter={tooltipFormatter} />
@@ -129,8 +132,8 @@ export default function Visualization() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={incomeByCategory} dataKey="value" nameKey="name" outerRadius={100} label>
-                        {incomeByCategory.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        {incomeByCategory.map((slice, i) => (
+                          <Cell key={i} fill={colorForSlice(slice.name, i)} />
                         ))}
                       </Pie>
                       <Tooltip formatter={tooltipFormatter} />
