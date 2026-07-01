@@ -1,5 +1,5 @@
 export type Account = { id: number; name: string };
-export type Category = { id: number; name: string };
+export type Category = { id: number; name: string; icon: string; color: string };
 export type Rule = { id: number; field: string; match_type: string; pattern: string; category_id: number };
 export type CategorizeLogEntry = {
   tx_id: number; partner: string; category: string; source: string; reason: string;
@@ -31,8 +31,8 @@ export const api = {
     return fetch("/api/upload", { method: "POST", body: fd }).then(j<{ inserted: number }>);
   },
   categories: () => fetch("/api/categories").then(j<Category[]>),
-  createCategory: (name: string) =>
-    fetch("/api/categories", { method: "POST", body: JSON.stringify({ name }), headers: { "Content-Type": "application/json" } }).then(j<Category>),
+  createCategory: (input: { name: string; icon: string; color: string }) =>
+    fetch("/api/categories", { method: "POST", body: JSON.stringify(input), headers: { "Content-Type": "application/json" } }).then(j<Category>),
   rules: () => fetch("/api/rules").then(j<Rule[]>),
   createRule: (r: Omit<Rule, "id">) =>
     fetch("/api/rules", { method: "POST", body: JSON.stringify(r), headers: { "Content-Type": "application/json" } }).then(j<Rule>),
