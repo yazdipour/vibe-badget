@@ -1,4 +1,7 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { ThemeProvider, useTheme } from "next-themes";
+import { Sun, Moon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import Upload from "./pages/Upload";
 import Transactions from "./pages/Transactions";
@@ -16,33 +19,50 @@ const nav = [
   ["/settings", "Settings"],
 ] as const;
 
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="ml-auto"
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+    >
+      {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+    </Button>
+  );
+}
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-background text-foreground">
-        <header className="border-b">
-          <nav className="mx-auto flex max-w-5xl gap-4 p-4">
-            <span className="font-bold">Vibe Badget</span>
-            {nav.map(([to, label]) => (
-              <NavLink key={to} to={to} end className={({ isActive }) =>
-                isActive ? "font-medium underline" : "text-muted-foreground"}>
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-        </header>
-        <main className="mx-auto max-w-5xl p-4">
-          <Routes>
-            <Route path="/" element={<Transactions />} />
-            <Route path="/visualize" element={<Visualization />} />
-            <Route path="/categorize" element={<Categorize />} />
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/rules" element={<Rules />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </main>
-        <Toaster />
-      </div>
-    </BrowserRouter>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <BrowserRouter>
+        <div className="min-h-screen bg-background text-foreground">
+          <header className="border-b">
+            <nav className="mx-auto flex max-w-5xl items-center gap-4 p-4">
+              <span className="font-bold">Vibe Badget</span>
+              {nav.map(([to, label]) => (
+                <NavLink key={to} to={to} end className={({ isActive }) =>
+                  isActive ? "font-medium underline" : "text-muted-foreground"}>
+                  {label}
+                </NavLink>
+              ))}
+              <ThemeToggle />
+            </nav>
+          </header>
+          <main className="mx-auto max-w-5xl p-4">
+            <Routes>
+              <Route path="/" element={<Transactions />} />
+              <Route path="/visualize" element={<Visualization />} />
+              <Route path="/categorize" element={<Categorize />} />
+              <Route path="/upload" element={<Upload />} />
+              <Route path="/rules" element={<Rules />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </main>
+          <Toaster />
+        </div>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
