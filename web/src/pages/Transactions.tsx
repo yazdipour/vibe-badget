@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { EyeOff } from "lucide-react";
 import { api, type Account, type Category, type Tx } from "@/lib/api";
 import { filterTxns } from "@/lib/transactions";
 import { formatEUR } from "@/lib/format";
@@ -11,9 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 function categoryVariant(by: string): "default" | "secondary" | "outline" {
@@ -29,7 +26,6 @@ export default function Transactions() {
   const [rows, setRows] = useState<Tx[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [deleteTarget, setDeleteTarget] = useState<Tx | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -59,15 +55,13 @@ export default function Transactions() {
     }
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    try {
-      await api.deleteTransaction(deleteTarget.id);
-      setRows((prev) => prev.filter((t) => t.id !== deleteTarget.id));
-      setDeleteTarget(null);
-    } catch (e) {
-      toast.error(String(e));
+  async function ignoreTransaction(tx: Tx) {
+    const ignoreCategory = categories.find((c) => c.name === "Ignore");
+    if (!ignoreCategory) {
+      toast.error("Ignore category not found");
+      return;
     }
+    await assignCategory(tx, ignoreCategory.id);
   }
 
   return (
@@ -112,7 +106,7 @@ export default function Transactions() {
         </TableHeader>
         <TableBody>
           {filtered.map((t) => (
-            <TableRow key={t.id}>
+            <TableRow key={t.id} className={t.category_name === "Ignore" ? "opacity-50 line-through" : undefined}>
               <TableCell>{t.booking_date}</TableCell>
               <TableCell className="whitespace-normal break-words">{t.partner_name}</TableCell>
               <TableCell className="whitespace-normal break-words text-muted-foreground">
@@ -154,29 +148,14 @@ export default function Transactions() {
                 )}
               </TableCell>
               <TableCell>
-                <Button variant="ghost" size="icon-sm" onClick={() => setDeleteTarget(t)}>
-                  <Trash2 size={14} />
+                <Button variant="ghost" size="icon-sm" onClick={() => ignoreTransaction(t)}>
+                  <EyeOff size={14} />
                 </Button>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Delete this transaction?</DialogTitle></DialogHeader>
-          {deleteTarget && (
-            <p className="text-sm text-muted-foreground">
-              {deleteTarget.booking_date} · {deleteTarget.partner_name} · {formatEUR(deleteTarget.amount_eur)}
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
