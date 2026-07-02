@@ -31,6 +31,7 @@ export default function Rules() {
   const [aiSuggestions, setAiSuggestions] = useState<AIRuleSuggestion[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, number>>({});
+  const [patternOverrides, setPatternOverrides] = useState<Record<string, string>>({});
   const [suggestPhase, setSuggestPhase] = useState<"idle" | "running" | "stopped" | "error" | "done">("idle");
   const [suggestLogs, setSuggestLogs] = useState<string[]>([]);
   const [suggestError, setSuggestError] = useState("");
@@ -129,12 +130,18 @@ export default function Rules() {
     return categoryOverrides[item.key] ?? item.categoryId;
   }
 
+  function resolvedPattern(item: ListItem): string {
+    return patternOverrides[item.key] ?? item.pattern;
+  }
+
   async function acceptItem(item: ListItem) {
     const categoryId = resolvedCategoryId(item);
     const categoryName = cats.find((c) => c.id === categoryId)?.name ?? item.categoryName;
+    const pattern = resolvedPattern(item);
+    if (!pattern.trim()) { toast.error("pattern required"); return; }
     try {
-      await api.createRule({ field: "partner_name", match_type: item.matchType, pattern: item.pattern, category_id: categoryId });
-      toast.success(`Rule created: "${item.pattern}" → ${categoryName}`);
+      await api.createRule({ field: "partner_name", match_type: item.matchType, pattern, category_id: categoryId });
+      toast.success(`Rule created: "${pattern}" → ${categoryName}`);
       setDismissed((prev) => new Set(prev).add(item.key));
       reload();
     } catch (e) {
@@ -215,7 +222,11 @@ export default function Rules() {
               <div key={item.key} className="flex items-center justify-between gap-2 rounded-lg border p-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <strong>{item.pattern}</strong>
+                    <Input
+                      value={resolvedPattern(item)}
+                      onChange={(e) => setPatternOverrides((prev) => ({ ...prev, [item.key]: e.target.value }))}
+                      className="h-7 w-40 font-medium"
+                    />
                     <span className="text-muted-foreground">→</span>
                     <Select
                       value={String(resolvedCategoryId(item))}

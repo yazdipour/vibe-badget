@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api, type Category, type Rule, type CategorizeLogEntry } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type Category, type Rule, type Tx, type CategorizeLogEntry } from "@/lib/api";
 import { CATEGORY_ICONS, resolveIcon } from "@/lib/icons";
 import { PALETTE, readableTextColor } from "@/lib/colors";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ function sourceVariant(source: string): "default" | "secondary" | "outline" {
 export default function Categorize() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [txns, setTxns] = useState<Tx[]>([]);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<CategorizeLogEntry[] | null>(null);
   const [newCategory, setNewCategory] = useState<{ name: string; icon: string; color: string; iconColor: string }>(
@@ -40,7 +41,19 @@ export default function Categorize() {
   const reload = () => {
     api.rules().then(setRules);
   };
-  useEffect(() => { reload(); api.categories().then(setCategories); }, []);
+  useEffect(() => { reload(); api.categories().then(setCategories); api.transactions().then(setTxns); }, []);
+
+  const categoryNet = useMemo(() => {
+    const net = new Map<string, number>();
+    for (const t of txns) {
+      if (!t.category_name) continue;
+      net.set(t.category_name, (net.get(t.category_name) ?? 0) + t.amount_eur);
+    }
+    return net;
+  }, [txns]);
+
+  const incomeCategories = categories.filter((c) => (categoryNet.get(c.name) ?? 0) > 0);
+  const expenseCategories = categories.filter((c) => (categoryNet.get(c.name) ?? 0) <= 0);
 
   async function createCategory() {
     if (!newCategory.name.trim()) { toast.error("name required"); return; }
@@ -149,6 +162,131 @@ export default function Categorize() {
     setRunPhase("idle");
   }
 
+  function renderCategory(c: Category) {
+    const Icon = resolveIcon(c.icon);
+    const categoryRules = rules.filter((r) => r.category_id === c.id);
+    const isExpanded = expandedCategory === c.id;
+    return (
+      <div key={c.id} className="rounded-lg border">
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 p-2 text-left"
+          onClick={() => {
+            if (isExpanded) {
+              setExpandedCategory(null);
+              setEditDraft(null);
+            } else {
+              setExpandedCategory(c.id);
+              setEditDraft({ icon: c.icon, color: c.color, iconColor: c.icon_color });
+            }
+          }}
+        >
+          <span
+            className="flex size-6 items-center justify-center rounded-full"
+            style={{ backgroundColor: c.color, color: c.icon_color }}
+          >
+            <Icon size={14} />
+          </span>
+          <span className="flex-1">{c.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {categoryRules.length} rule{categoryRules.length === 1 ? "" : "s"}
+          </span>
+        </button>
+        {isExpanded && (
+          <div className="space-y-2 border-t p-2">
+            {categoryRules.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
+                <span>{r.field} {r.match_type} "{r.pattern}"</span>
+                <Button size="sm" variant="ghost" onClick={() => deleteCategoryRule(r.id)}>Delete</Button>
+              </div>
+            ))}
+            {editDraft && (
+              <div className="space-y-2 border-b pb-2">
+                <div className="flex flex-wrap gap-1">
+                  {CATEGORY_ICONS.map((iconName) => {
+                    const Icon = resolveIcon(iconName);
+                    const selected = editDraft.icon === iconName;
+                    return (
+                      <button
+                        key={iconName}
+                        type="button"
+                        className={`flex size-8 items-center justify-center rounded-lg border ${selected ? "border-foreground" : "border-input"}`}
+                        onClick={() => setEditDraft({ ...editDraft, icon: iconName })}
+                      >
+                        <Icon size={16} />
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
+                  {PALETTE.map((color) => {
+                    const selected = editDraft.color === color;
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`size-8 rounded-full ${selected ? "ring-2 ring-offset-2 ring-foreground" : ""}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setEditDraft({ ...editDraft, color, iconColor: readableTextColor(color) })}
+                      />
+                    );
+                  })}
+                  <input
+                    type="color"
+                    className="size-8 cursor-pointer rounded-full border border-input p-0"
+                    value={editDraft.color}
+                    onChange={(e) => setEditDraft({ ...editDraft, color: e.target.value, iconColor: readableTextColor(e.target.value) })}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Icon color:</span>
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-2 py-1 text-xs ${editDraft.iconColor === "#000000" ? "border-foreground" : "border-input"}`}
+                    onClick={() => setEditDraft({ ...editDraft, iconColor: "#000000" })}
+                  >
+                    Black
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-lg border px-2 py-1 text-xs ${editDraft.iconColor === "#ffffff" ? "border-foreground" : "border-input"}`}
+                    onClick={() => setEditDraft({ ...editDraft, iconColor: "#ffffff" })}
+                  >
+                    White
+                  </button>
+                </div>
+                <Button size="sm" onClick={() => saveCategoryAppearance(c.id)}>Save</Button>
+              </div>
+            )}
+            <div className="flex flex-wrap items-end gap-2">
+              <select
+                className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                value={newRule.field}
+                onChange={(e) => setNewRule({ ...newRule, field: e.target.value })}
+              >
+                {FIELDS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <select
+                className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+                value={newRule.match_type}
+                onChange={(e) => setNewRule({ ...newRule, match_type: e.target.value })}
+              >
+                {MATCHES.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <input
+                className="h-8 w-40 rounded-lg border border-input bg-transparent px-2 text-sm"
+                placeholder="pattern"
+                value={newRule.pattern}
+                onChange={(e) => setNewRule({ ...newRule, pattern: e.target.value })}
+              />
+              <Button size="sm" onClick={() => addCategoryRule(c.id)}>Add rule</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -214,131 +352,23 @@ export default function Categorize() {
       <Card>
         <CardHeader><CardTitle>Categories</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            {categories.map((c) => {
-              const Icon = resolveIcon(c.icon);
-              const categoryRules = rules.filter((r) => r.category_id === c.id);
-              const isExpanded = expandedCategory === c.id;
-              return (
-                <div key={c.id} className="rounded-lg border">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-2 p-2 text-left"
-                    onClick={() => {
-                      if (isExpanded) {
-                        setExpandedCategory(null);
-                        setEditDraft(null);
-                      } else {
-                        setExpandedCategory(c.id);
-                        setEditDraft({ icon: c.icon, color: c.color, iconColor: c.icon_color });
-                      }
-                    }}
-                  >
-                    <span
-                      className="flex size-6 items-center justify-center rounded-full"
-                      style={{ backgroundColor: c.color, color: c.icon_color }}
-                    >
-                      <Icon size={14} />
-                    </span>
-                    <span className="flex-1">{c.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {categoryRules.length} rule{categoryRules.length === 1 ? "" : "s"}
-                    </span>
-                  </button>
-                  {isExpanded && (
-                    <div className="space-y-2 border-t p-2">
-                      {categoryRules.map((r) => (
-                        <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
-                          <span>{r.field} {r.match_type} "{r.pattern}"</span>
-                          <Button size="sm" variant="ghost" onClick={() => deleteCategoryRule(r.id)}>Delete</Button>
-                        </div>
-                      ))}
-                      {editDraft && (
-                        <div className="space-y-2 border-b pb-2">
-                          <div className="flex flex-wrap gap-1">
-                            {CATEGORY_ICONS.map((iconName) => {
-                              const Icon = resolveIcon(iconName);
-                              const selected = editDraft.icon === iconName;
-                              return (
-                                <button
-                                  key={iconName}
-                                  type="button"
-                                  className={`flex size-8 items-center justify-center rounded-lg border ${selected ? "border-foreground" : "border-input"}`}
-                                  onClick={() => setEditDraft({ ...editDraft, icon: iconName })}
-                                >
-                                  <Icon size={16} />
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1">
-                            {PALETTE.map((color) => {
-                              const selected = editDraft.color === color;
-                              return (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  className={`size-8 rounded-full ${selected ? "ring-2 ring-offset-2 ring-foreground" : ""}`}
-                                  style={{ backgroundColor: color }}
-                                  onClick={() => setEditDraft({ ...editDraft, color, iconColor: readableTextColor(color) })}
-                                />
-                              );
-                            })}
-                            <input
-                              type="color"
-                              className="size-8 cursor-pointer rounded-full border border-input p-0"
-                              value={editDraft.color}
-                              onChange={(e) => setEditDraft({ ...editDraft, color: e.target.value, iconColor: readableTextColor(e.target.value) })}
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Icon color:</span>
-                            <button
-                              type="button"
-                              className={`rounded-lg border px-2 py-1 text-xs ${editDraft.iconColor === "#000000" ? "border-foreground" : "border-input"}`}
-                              onClick={() => setEditDraft({ ...editDraft, iconColor: "#000000" })}
-                            >
-                              Black
-                            </button>
-                            <button
-                              type="button"
-                              className={`rounded-lg border px-2 py-1 text-xs ${editDraft.iconColor === "#ffffff" ? "border-foreground" : "border-input"}`}
-                              onClick={() => setEditDraft({ ...editDraft, iconColor: "#ffffff" })}
-                            >
-                              White
-                            </button>
-                          </div>
-                          <Button size="sm" onClick={() => saveCategoryAppearance(c.id)}>Save</Button>
-                        </div>
-                      )}
-                      <div className="flex flex-wrap items-end gap-2">
-                        <select
-                          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
-                          value={newRule.field}
-                          onChange={(e) => setNewRule({ ...newRule, field: e.target.value })}
-                        >
-                          {FIELDS.map((f) => <option key={f} value={f}>{f}</option>)}
-                        </select>
-                        <select
-                          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
-                          value={newRule.match_type}
-                          onChange={(e) => setNewRule({ ...newRule, match_type: e.target.value })}
-                        >
-                          {MATCHES.map((m) => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                        <input
-                          className="h-8 w-40 rounded-lg border border-input bg-transparent px-2 text-sm"
-                          placeholder="pattern"
-                          value={newRule.pattern}
-                          onChange={(e) => setNewRule({ ...newRule, pattern: e.target.value })}
-                        />
-                        <Button size="sm" onClick={() => addCategoryRule(c.id)}>Add rule</Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Income</h3>
+              {incomeCategories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No income categories yet.</p>
+              ) : (
+                incomeCategories.map(renderCategory)
+              )}
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Expenses</h3>
+              {expenseCategories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No expense categories yet.</p>
+              ) : (
+                expenseCategories.map(renderCategory)
+              )}
+            </div>
           </div>
 
           <div className="space-y-2 border-t pt-4">
