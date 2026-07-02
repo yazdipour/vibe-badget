@@ -102,3 +102,37 @@ func TestRunSkippedWithoutLLM(t *testing.T) {
 		t.Fatalf("unexpected result %+v", res)
 	}
 }
+
+type recordingLLM struct {
+	lastCategories []string
+}
+
+func (f *recordingLLM) Classify(_ context.Context, _ string, categories []string) (string, string, error) {
+	f.lastCategories = categories
+	return "Uncategorized", "", nil
+}
+
+func TestRunNeverOffersIgnoreToLLM(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	s := store.New(d)
+
+	_, err := s.InsertTransactions([]model.Transaction{
+		{AccountName: "Main", PartnerName: "Mystery Shop", DedupeHash: "ignore-test-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f := &recordingLLM{}
+	_, err = Run(context.Background(), s, f, 1, nil)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	for _, c := range f.lastCategories {
+		if c == "Ignore" {
+			t.Fatalf("Ignore must not be offered to the LLM, got categories: %v", f.lastCategories)
+		}
+	}
+}

@@ -55,6 +55,14 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int, o
 	for name, id := range byName {
 		idToName[id] = name
 	}
+
+	var classifiableNames []string
+	for _, n := range names {
+		if n != "Ignore" {
+			classifiableNames = append(classifiableNames, n)
+		}
+	}
+
 	txns, err := s.UncategorizedTransactions()
 	if err != nil {
 		return res, err
@@ -99,7 +107,7 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int, o
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			name, reason, cerr := llm.Classify(ctx, partnerOf[txID], names)
+			name, reason, cerr := llm.Classify(ctx, partnerOf[txID], classifiableNames)
 			mu.Lock()
 			defer mu.Unlock()
 			if cerr != nil {
