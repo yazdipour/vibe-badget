@@ -27,7 +27,7 @@ const nav = [
 function currentTitle(pathname: string): string {
   if (pathname === "/settings") return "Settings";
   const match = nav.find(([to]) => (to === "/" ? pathname === "/" : pathname.startsWith(to)));
-  return match?.[1] ?? "Vibe Badget";
+  return match?.[1] ?? "Vibe Wallet";
 }
 
 function AppSidebar() {
@@ -39,7 +39,7 @@ function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton className="data-[slot=sidebar-menu-button]:p-1.5!" render={<NavLink to="/" end />}>
               <Wallet className="size-5!" />
-              <span className="text-base font-semibold">Vibe Badget</span>
+              <span className="text-base font-semibold">Vibe Wallet</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -67,6 +67,11 @@ function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
+            <AccountInfoDialog
+              trigger={<SidebarMenuButton tooltip="Accounts" />}
+            />
+          </SidebarMenuItem>
+          <SidebarMenuItem>
             <SidebarMenuButton
               render={<NavLink to="/settings" />}
               isActive={location.pathname === "/settings"}
@@ -90,9 +95,6 @@ function SiteHeader() {
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mx-2 h-4 data-vertical:self-auto" />
         <h1 className="text-base font-medium">{currentTitle(location.pathname)}</h1>
-        <div className="ml-auto">
-          <AccountInfoDialog />
-        </div>
       </div>
     </header>
   );

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/categorize"
+	"github.com/sh-yazdipour/vibe-wallet/internal/categorize"
 )
 
 func (s *Server) categorize(w http.ResponseWriter, r *http.Request) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/categorize"
+	"github.com/sh-yazdipour/vibe-wallet/internal/categorize"
 )
 
 type aiRuleSuggestionResponse struct {

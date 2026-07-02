@@ -1,16 +1,16 @@
 services:
-  vibe-badget:
+  vibe-wallet:
     build: .
-    container_name: vibe-badget-dev
+    container_name: vibe-wallet-dev
     ports:
       - "8080:8080"
     volumes:
-      - vibe-badget-dev-data:/data
+      - vibe-wallet-dev-data:/data
     environment:
-      DB_PATH: /data/vibe-badget.db
+      DB_PATH: /data/vibe-wallet.db
       ADDR: ":8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  vibe-badget-dev-data:
+  vibe-wallet-dev-data:

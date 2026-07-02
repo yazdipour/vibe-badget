@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/store"
+	"github.com/sh-yazdipour/vibe-wallet/internal/store"
 )
 
 const classifyBatchSize = 50

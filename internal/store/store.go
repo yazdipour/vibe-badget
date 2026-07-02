@@ -3,7 +3,7 @@ package store
 import (
 	"database/sql"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/model"
+	"github.com/sh-yazdipour/vibe-wallet/internal/model"
 )
 
 type Store struct{ db *sql.DB }

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/model"
+	"github.com/sh-yazdipour/vibe-wallet/internal/model"
 )
 
 var header = []string{

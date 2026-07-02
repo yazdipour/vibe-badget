@@ -3,7 +3,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/categorize"
+	"github.com/sh-yazdipour/vibe-wallet/internal/categorize"
 )
 
 func (s *Server) llmHealth(w http.ResponseWriter, r *http.Request) {

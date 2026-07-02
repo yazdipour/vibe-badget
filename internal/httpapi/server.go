@@ -5,7 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/store"
+	"github.com/sh-yazdipour/vibe-wallet/internal/store"
 )
 
 type Server struct {

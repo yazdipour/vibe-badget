@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/model"
+	"github.com/sh-yazdipour/vibe-wallet/internal/model"
 )
 
 var validFields = map[string]bool{"partner_iban": true, "partner_name": true, "type": true, "payment_reference": true}

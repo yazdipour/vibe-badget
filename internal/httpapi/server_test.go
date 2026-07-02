@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/db"
-	"github.com/sh-yazdipour/vibe-badget/internal/model"
-	"github.com/sh-yazdipour/vibe-badget/internal/store"
+	"github.com/sh-yazdipour/vibe-wallet/internal/db"
+	"github.com/sh-yazdipour/vibe-wallet/internal/model"
+	"github.com/sh-yazdipour/vibe-wallet/internal/store"
 )
 
 func TestUploadAndList(t *testing.T) {

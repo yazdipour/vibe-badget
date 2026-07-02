@@ -3,7 +3,7 @@ package categorize
 import (
 	"testing"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/model"
+	"github.com/sh-yazdipour/vibe-wallet/internal/model"
 )
 
 func TestMatchPriority(t *testing.T) {

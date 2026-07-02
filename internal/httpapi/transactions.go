@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/csvimport"
+	"github.com/sh-yazdipour/vibe-wallet/internal/csvimport"
 )
 
 func (s *Server) listTransactions(w http.ResponseWriter, r *http.Request) {

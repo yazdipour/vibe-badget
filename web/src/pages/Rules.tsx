@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Category, type Rule, type Tx, type AIRuleSuggestion } from "@/lib/api";
-import { downloadCsv, parseCsv } from "@/lib/csv";
 import { suggestRules, type Suggestion } from "@/lib/suggestions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,11 +13,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 const FIELDS = ["partner_iban", "partner_name", "type", "payment_reference"];
 const MATCHES = ["exact", "keyword"];
-const DISMISSED_STORAGE_KEY = "vibe-badget:dismissed-rule-suggestions";
+const DISMISSED_STORAGE_KEY = "vibe-wallet:dismissed-rule-suggestions";
 
 type ListItem =
   | { source: "heuristic"; key: string; pattern: string; categoryName: string; categoryId: number; count: number; matchType: "exact" }
@@ -61,59 +61,10 @@ export default function Rules() {
   useEffect(() => { reload(); api.categories().then(setCats); api.transactions().then(setTxns); }, []);
   useEffect(() => { saveDismissed(dismissed); }, [dismissed]);
 
-  const catName = (id: number) => cats.find((c) => c.id === id)?.name ?? id;
-
   async function add() {
     if (!draft.pattern || !draft.category_id) { toast.error("pattern and category required"); return; }
     try { await api.createRule(draft); setDraft({ ...draft, pattern: "" }); reload(); }
     catch (e) { toast.error(String(e)); }
-  }
-
-  function exportRules() {
-    const rows: string[][] = [["Field", "MatchType", "Pattern", "Category"]];
-    for (const r of rules) {
-      rows.push([r.field, r.match_type, r.pattern, String(catName(r.category_id))]);
-    }
-    downloadCsv("rules-export.csv", rows);
-  }
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await file.text();
-    const rows = parseCsv(text);
-    if (rows.length === 0) {
-      toast.error("Empty file");
-      e.target.value = "";
-      return;
-    }
-    const [header, ...dataRows] = rows;
-    if (header.join(",") !== "Field,MatchType,Pattern,Category") {
-      toast.error("Unrecognized rules CSV format");
-      e.target.value = "";
-      return;
-    }
-    let imported = 0;
-    let skipped = 0;
-    for (const row of dataRows) {
-      const [field, matchType, pattern, categoryName] = row;
-      const cat = cats.find((c) => c.name.toLowerCase() === (categoryName ?? "").toLowerCase());
-      if (!cat) {
-        skipped++;
-        continue;
-      }
-      try {
-        await api.createRule({ field, match_type: matchType, pattern, category_id: cat.id });
-        imported++;
-      } catch {
-        skipped++;
-      }
-    }
-    toast.success(`Imported ${imported} rules, skipped ${skipped}`);
-    reload();
-    e.target.value = "";
   }
 
   useEffect(() => {
@@ -270,7 +221,10 @@ export default function Rules() {
         <CardHeader><CardTitle>AI-suggested rules</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           <div className="flex gap-2">
-            <Button onClick={suggestWithAI} disabled={suggestPhase === "running"}>Suggest with AI</Button>
+            <Button onClick={suggestWithAI} disabled={suggestPhase === "running"}>
+              <Sparkles />
+              Suggest with AI
+            </Button>
             <Button variant="outline" onClick={wipeAllSuggestions}>
               Wipe suggestions
             </Button>
@@ -357,15 +311,6 @@ export default function Rules() {
           <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
         <Button onClick={add}>Add rule</Button>
-        <Button variant="outline" onClick={exportRules}>Export</Button>
-        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>Import</Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={onImportFile}
-        />
       </div>
 
       <Table>

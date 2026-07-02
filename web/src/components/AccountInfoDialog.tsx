@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactElement, useState } from "react";
 import { Users, Download, Trash2, Upload as UploadIcon } from "lucide-react";
 import { api, type Account, type Tx } from "@/lib/api";
 import { downloadCsv } from "@/lib/csv";
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
-export function AccountInfoDialog() {
+export function AccountInfoDialog({ trigger }: { trigger?: ReactElement }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [txns, setTxns] = useState<Tx[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
@@ -65,7 +65,7 @@ export function AccountInfoDialog() {
   return (
     <>
       <Dialog onOpenChange={(open) => open && load()}>
-        <DialogTrigger render={<Button variant="outline" />}>
+        <DialogTrigger render={trigger ?? <Button variant="outline" />}>
           <Users size={16} />
           Accounts
         </DialogTrigger>

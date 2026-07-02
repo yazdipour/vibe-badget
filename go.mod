@@ -1,4 +1,4 @@
-module github.com/sh-yazdipour/vibe-badget
+module github.com/sh-yazdipour/vibe-wallet
 
 go 1.26.4
 

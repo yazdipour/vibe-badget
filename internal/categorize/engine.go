@@ -3,7 +3,7 @@ package categorize
 import (
 	"strings"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/model"
+	"github.com/sh-yazdipour/vibe-wallet/internal/model"
 )
 
 var fieldPriority = []string{"partner_iban", "partner_name", "type", "payment_reference"}

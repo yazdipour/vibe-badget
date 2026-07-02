@@ -3,8 +3,8 @@ package store
 import (
 	"testing"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/db"
-	"github.com/sh-yazdipour/vibe-badget/internal/model"
+	"github.com/sh-yazdipour/vibe-wallet/internal/db"
+	"github.com/sh-yazdipour/vibe-wallet/internal/model"
 )
 
 func newStore(t *testing.T) *Store {

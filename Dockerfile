@@ -13,12 +13,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /vibe-badget .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /vibe-wallet .
 
 # 3. Minimal runtime
 FROM gcr.io/distroless/static-debian12
-COPY --from=build /vibe-badget /vibe-badget
-ENV DB_PATH=/data/vibe-badget.db ADDR=:8080
+COPY --from=build /vibe-wallet /vibe-wallet
+ENV DB_PATH=/data/vibe-wallet.db ADDR=:8080
 EXPOSE 8080
 VOLUME /data
-ENTRYPOINT ["/vibe-badget"]
+ENTRYPOINT ["/vibe-wallet"]

@@ -5,15 +5,15 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/sh-yazdipour/vibe-badget/internal/db"
-	"github.com/sh-yazdipour/vibe-badget/internal/httpapi"
-	"github.com/sh-yazdipour/vibe-badget/internal/store"
+	"github.com/sh-yazdipour/vibe-wallet/internal/db"
+	"github.com/sh-yazdipour/vibe-wallet/internal/httpapi"
+	"github.com/sh-yazdipour/vibe-wallet/internal/store"
 )
 
 func main() {
 	path := os.Getenv("DB_PATH")
 	if path == "" {
-		path = "vibe-badget.db"
+		path = "vibe-wallet.db"
 	}
 	d, err := db.Open(path)
 	if err != nil {
