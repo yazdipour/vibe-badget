@@ -1,6 +1,6 @@
 services:
   vibe-wallet:
-    image: ghcr.io/sh-yazdipour/vibe-wallet:latest
+    image: ghcr.io/yazdipour/vibe-wallet:latest
     container_name: vibe-wallet
     ports:
       - "8080:8080"

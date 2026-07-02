@@ -19,7 +19,7 @@ Self-hosted transaction tracker for importing bank CSVs, managing accounts, and 
 ### Docker
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/yazdipour/vibe-wallet/main/docker-compose.yml -o docker-compose.yml
+curl -sSL https://raw.githubusercontent.com/yazdipour/vibe-wallet/refs/heads/main/docker-compose.yml -o docker-compose.yml
 docker compose up -d
 ```
 
