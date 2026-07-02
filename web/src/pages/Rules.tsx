@@ -226,11 +226,7 @@ export default function Rules() {
         <CardContent className="space-y-2">
           <div className="flex gap-2">
             <Button onClick={suggestWithAI} disabled={suggestPhase === "running"}>Suggest with AI</Button>
-            <Button
-              variant="outline"
-              onClick={wipeAiSuggestions}
-              disabled={suggestPhase === "running" || aiSuggestions.length === 0}
-            >
+            <Button variant="outline" onClick={wipeAiSuggestions}>
               Wipe suggestions
             </Button>
           </div>
