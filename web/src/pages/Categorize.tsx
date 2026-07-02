@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 const FIELDS = ["partner_iban", "partner_name", "type", "payment_reference"];
@@ -28,6 +31,11 @@ export default function Categorize() {
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<{ icon: string; color: string; iconColor: string } | null>(null);
   const [newRule, setNewRule] = useState({ field: "partner_name", match_type: "keyword", pattern: "" });
+  const [runPhase, setRunPhase] = useState<"idle" | "running" | "error" | "done">("idle");
+  const [runTotal, setRunTotal] = useState(0);
+  const [runProcessed, setRunProcessed] = useState(0);
+  const [runError, setRunError] = useState("");
+  const [runSummary, setRunSummary] = useState<{ categorized: number; stillUncategorized: number } | null>(null);
 
   const reload = () => {
     api.rules().then(setRules);
@@ -83,7 +91,15 @@ export default function Categorize() {
   async function run() {
     setBusy(true);
     setLog([]);
+    setRunError("");
+    setRunSummary(null);
+    setRunProcessed(0);
+    setRunPhase("running");
     try {
+      const allTxns = await api.transactions();
+      const total = allTxns.filter((t) => !t.category_name).length;
+      setRunTotal(total);
+
       const resp = await fetch("/api/categorize", { method: "POST" });
       if (!resp.ok || !resp.body) {
         throw new Error(await resp.text());
@@ -102,25 +118,96 @@ export default function Categorize() {
           const parsed = JSON.parse(line);
           if (parsed.done) {
             if (parsed.error) {
+              setRunError(parsed.error);
+              setRunPhase("error");
               toast.error(parsed.error);
             } else {
+              setRunSummary({ categorized: parsed.rules + parsed.llm, stillUncategorized: parsed.skipped });
+              setRunPhase("done");
               toast.success(`Rules: ${parsed.rules}, LLM: ${parsed.llm}, Skipped: ${parsed.skipped}`);
             }
           } else {
             setLog((prev) => [...(prev ?? []), parsed as CategorizeLogEntry]);
+            setRunProcessed((prev) => prev + 1);
           }
         }
       }
       reload();
     } catch (e) {
+      setRunError(String(e));
+      setRunPhase("error");
       toast.error(String(e));
     } finally {
       setBusy(false);
     }
   }
 
+  function closeRunPopup() {
+    setRunPhase("idle");
+  }
+
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader><CardTitle>Run categorization based on rules</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <Button onClick={run} disabled={busy}>Run categorization based on rules</Button>
+
+          {log && (
+            log.length === 0 ? (
+              <p className="text-muted-foreground">Nothing to categorize.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Partner</TableHead><TableHead>Category</TableHead>
+                    <TableHead>Source</TableHead><TableHead>Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {log.map((entry) => (
+                    <TableRow key={entry.tx_id}>
+                      <TableCell>{entry.partner}</TableCell>
+                      <TableCell>{entry.category || "—"}</TableCell>
+                      <TableCell><Badge variant={sourceVariant(entry.source)}>{entry.source}</Badge></TableCell>
+                      <TableCell className="text-muted-foreground">{entry.reason || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={runPhase !== "idle"} onOpenChange={(open) => { if (!open && runPhase !== "running") closeRunPopup(); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Running categorization</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            {runPhase === "running" && (
+              <>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-foreground transition-all"
+                    style={{ width: `${runTotal === 0 ? 0 : Math.min(100, Math.round((runProcessed / runTotal) * 100))}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{runProcessed} / {runTotal} processed</p>
+              </>
+            )}
+            {runPhase === "error" && <p className="text-sm text-destructive">{runError}</p>}
+            {runPhase === "done" && runSummary && (
+              <p className="text-sm">
+                Categorized {runSummary.categorized}. Still uncategorized: {runSummary.stillUncategorized}.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeRunPopup} disabled={runPhase === "running"}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader><CardTitle>Categories</CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -313,38 +400,6 @@ export default function Categorize() {
             </div>
             <Button onClick={createCategory}>Create category</Button>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Run AI categorization</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <Button onClick={run} disabled={busy}>Run AI categorization</Button>
-
-          {log && (
-            log.length === 0 ? (
-              <p className="text-muted-foreground">Nothing to categorize.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Partner</TableHead><TableHead>Category</TableHead>
-                    <TableHead>Source</TableHead><TableHead>Reason</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {log.map((entry) => (
-                    <TableRow key={entry.tx_id}>
-                      <TableCell>{entry.partner}</TableCell>
-                      <TableCell>{entry.category || "—"}</TableCell>
-                      <TableCell><Badge variant={sourceVariant(entry.source)}>{entry.source}</Badge></TableCell>
-                      <TableCell className="text-muted-foreground">{entry.reason || "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )
-          )}
         </CardContent>
       </Card>
     </div>
