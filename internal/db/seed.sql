@@ -1,7 +1,7 @@
 INSERT OR IGNORE INTO categories (name) VALUES
   ('Groceries'), ('Eating Out'), ('Transport'), ('Shopping'),
   ('Bills & Utilities'), ('Income'), ('Savings'), ('Entertainment'),
-  ('Health'), ('Uncategorized');
+  ('Health'), ('Uncategorized'), ('Ignore');
 
 -- Groceries rules
 INSERT OR IGNORE INTO rules (field, match_type, pattern, category_id)
