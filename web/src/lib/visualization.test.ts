@@ -37,6 +37,16 @@ test("filterTransactions: 'all' keeps every account", () => {
   assert.equal(result.length, 2);
 });
 
+test("filterTransactions: excludes Ignore-categorized rows", () => {
+  const txns = [
+    mkTx({ id: 1, category_name: "Groceries" }),
+    mkTx({ id: 2, category_name: "Ignore" }),
+    mkTx({ id: 3, category_name: "" }),
+  ];
+  const result = filterTransactions(txns, "all", "", "");
+  assert.deepEqual(result.map((t) => t.id), [1, 3]);
+});
+
 test("filterTransactions: date range is inclusive on both ends", () => {
   const txns = [
     mkTx({ id: 1, booking_date: "2026-01-01" }),

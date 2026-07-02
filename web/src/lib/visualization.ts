@@ -11,6 +11,7 @@ export function filterTransactions(
   to: string,
 ): Tx[] {
   return txns.filter((t) => {
+    if (t.category_name === "Ignore") return false;
     if (accountId !== "all" && String(t.account_id) !== accountId) return false;
     if (from && t.booking_date < from) return false;
     if (to && t.booking_date > to) return false;
