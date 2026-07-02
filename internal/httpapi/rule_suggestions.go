@@ -118,7 +118,9 @@ func (s *Server) suggestRules(w http.ResponseWriter, r *http.Request) {
 	var categoryNames []string
 	catByName := map[string]int64{}
 	for _, c := range cats {
-		categoryNames = append(categoryNames, c.Name)
+		if c.Name != "Ignore" {
+			categoryNames = append(categoryNames, c.Name)
+		}
 		catByName[c.Name] = c.ID
 	}
 
@@ -143,6 +145,9 @@ func (s *Server) suggestRules(w http.ResponseWriter, r *http.Request) {
 	for _, sug := range suggestions {
 		pattern := strings.TrimSpace(sug.Pattern)
 		if pattern == "" || covered[strings.ToLower(pattern)] {
+			continue
+		}
+		if sug.Category == "Ignore" {
 			continue
 		}
 		catID, ok := catByName[sug.Category]
