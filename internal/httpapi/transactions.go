@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/sh-yazdipour/vibe-badget/internal/csvimport"
 )
@@ -47,10 +48,36 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	n, err := s.store.InsertTransactions(txns)
+
+	cats, err := s.store.ListCategories()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	writeJSON(w, 200, map[string]int{"inserted": n})
+	catByName := map[string]int64{}
+	for _, c := range cats {
+		catByName[strings.ToLower(c.Name)] = c.ID
+	}
+
+	toInsert := txns[:0]
+	skipped := 0
+	for _, t := range txns {
+		if t.Category != "" {
+			id, ok := catByName[strings.ToLower(t.Category)]
+			if !ok {
+				skipped++
+				continue
+			}
+			t.CategoryID = &id
+			t.CategorizedBy = "import"
+		}
+		toInsert = append(toInsert, t)
+	}
+
+	n, err := s.store.InsertTransactions(toInsert)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, 200, map[string]int{"inserted": n, "skipped_unknown_category": skipped})
 }

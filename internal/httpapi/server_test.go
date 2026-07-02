@@ -327,3 +327,44 @@ func TestDeleteTransaction(t *testing.T) {
 		t.Fatalf("transaction still present after delete: %s", rec3.Body)
 	}
 }
+
+func TestUploadNativeFormatResolvesCategory(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	h := NewServer(store.New(d), os.DirFS("."))
+
+	nativeCSV := `Date,Partner,Reference,Amount,Category,Account
+2026-06-19,"Lidl sagt Danke",,-28.35,Groceries,Main Account
+2026-06-20,"Mystery Merchant",,-5.00,NotARealCategory,Main Account
+`
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, _ := mw.CreateFormFile("file", "export.csv")
+	fw.Write([]byte(nativeCSV))
+	mw.Close()
+
+	req := httptest.NewRequest("POST", "/api/upload", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("upload status %d: %s", rec.Code, rec.Body)
+	}
+	var result struct {
+		Inserted               int `json:"inserted"`
+		SkippedUnknownCategory int `json:"skipped_unknown_category"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &result)
+	if result.Inserted != 1 || result.SkippedUnknownCategory != 1 {
+		t.Fatalf("unexpected result: %+v body=%s", result, rec.Body)
+	}
+
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest("GET", "/api/transactions", nil))
+	if !bytes.Contains(rec2.Body.Bytes(), []byte(`"categorized_by":"import"`)) {
+		t.Fatalf("expected categorized_by import in response: %s", rec2.Body)
+	}
+	if bytes.Contains(rec2.Body.Bytes(), []byte("Mystery Merchant")) {
+		t.Fatalf("row with unknown category should have been skipped, found in response: %s", rec2.Body)
+	}
+}
