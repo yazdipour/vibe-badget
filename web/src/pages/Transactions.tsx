@@ -10,7 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { CategoryBadge } from "@/components/CategoryBadge";
 import { toast } from "sonner";
 
 function categoryVariant(by: string): "default" | "secondary" | "outline" {
@@ -126,23 +126,13 @@ export default function Transactions() {
               </TableCell>
               <TableCell>
                 {t.category_name && editingId !== t.id ? (
-                  (() => {
-                    const category = categories.find((c) => c.name === t.category_name);
-                    const Icon = resolveIcon(category?.icon ?? "Tag");
-                    const bg = category?.color ?? "#6b7280";
-                    const fg = category?.icon_color ?? "#ffffff";
-                    return (
-                      <button type="button" onClick={() => setEditingId(t.id)} className="cursor-pointer">
-                        <Badge
-                          variant={categoryVariant(t.categorized_by)}
-                          style={{ backgroundColor: bg, color: fg, borderColor: "transparent" }}
-                        >
-                          <Icon size={12} />
-                          {t.category_name}
-                        </Badge>
-                      </button>
-                    );
-                  })()
+                  <button type="button" onClick={() => setEditingId(t.id)} className="cursor-pointer">
+                    <CategoryBadge
+                      category={categories.find((c) => c.name === t.category_name)}
+                      name={t.category_name}
+                      variant={categoryVariant(t.categorized_by)}
+                    />
+                  </button>
                 ) : (
                   <Select
                     value={categories.find((c) => c.name === t.category_name)?.id ? String(categories.find((c) => c.name === t.category_name)?.id) : undefined}

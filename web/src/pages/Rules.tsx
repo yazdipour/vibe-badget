@@ -5,6 +5,7 @@ import { suggestRules, type Suggestion } from "@/lib/suggestions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { CategoryBadge } from "@/components/CategoryBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -29,6 +30,7 @@ export default function Rules() {
   const [draft, setDraft] = useState({ field: "partner_name", match_type: "keyword", pattern: "", category_id: 0 });
   const [aiSuggestions, setAiSuggestions] = useState<AIRuleSuggestion[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, number>>({});
   const [suggestPhase, setSuggestPhase] = useState<"idle" | "running" | "stopped" | "error" | "done">("idle");
   const [suggestLogs, setSuggestLogs] = useState<string[]>([]);
   const [suggestError, setSuggestError] = useState("");
@@ -123,10 +125,16 @@ export default function Rules() {
     return [...heuristic, ...ai];
   }, [heuristicSuggestions, aiSuggestions, dismissed]);
 
+  function resolvedCategoryId(item: ListItem): number {
+    return categoryOverrides[item.key] ?? item.categoryId;
+  }
+
   async function acceptItem(item: ListItem) {
+    const categoryId = resolvedCategoryId(item);
+    const categoryName = cats.find((c) => c.id === categoryId)?.name ?? item.categoryName;
     try {
-      await api.createRule({ field: "partner_name", match_type: item.matchType, pattern: item.pattern, category_id: item.categoryId });
-      toast.success(`Rule created: "${item.pattern}" → ${item.categoryName}`);
+      await api.createRule({ field: "partner_name", match_type: item.matchType, pattern: item.pattern, category_id: categoryId });
+      toast.success(`Rule created: "${item.pattern}" → ${categoryName}`);
       setDismissed((prev) => new Set(prev).add(item.key));
       reload();
     } catch (e) {
@@ -206,9 +214,17 @@ export default function Rules() {
             items.map((item) => (
               <div key={item.key} className="flex items-center justify-between gap-2 rounded-lg border p-2">
                 <div>
-                  <div>
-                    <strong>{item.pattern}</strong> → {item.categoryName}
-                    {item.source === "ai" && <Badge variant="secondary" className="ml-2">AI</Badge>}
+                  <div className="flex items-center gap-2">
+                    <strong>{item.pattern}</strong>
+                    <span className="text-muted-foreground">→</span>
+                    <Select
+                      value={String(resolvedCategoryId(item))}
+                      onValueChange={(v) => { if (v) setCategoryOverrides((prev) => ({ ...prev, [item.key]: Number(v) })); }}
+                    >
+                      <SelectTrigger className="h-7 w-40"><SelectValue /></SelectTrigger>
+                      <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                    {item.source === "ai" && <Badge variant="secondary">AI</Badge>}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {item.source === "heuristic" ? `seen ${item.count} times` : item.reason}
@@ -286,7 +302,8 @@ export default function Rules() {
           {rules.map((r) => (
             <TableRow key={r.id}>
               <TableCell>{r.field}</TableCell><TableCell>{r.match_type}</TableCell>
-              <TableCell>{r.pattern}</TableCell><TableCell>{catName(r.category_id)}</TableCell>
+              <TableCell>{r.pattern}</TableCell>
+              <TableCell><CategoryBadge category={cats.find((c) => c.id === r.category_id)} /></TableCell>
               <TableCell className="text-right">
                 <Button variant="ghost" size="sm"
                   onClick={async () => { await api.deleteRule(r.id); reload(); }}>Delete</Button>

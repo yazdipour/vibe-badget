@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { Settings as SettingsIcon } from "lucide-react";
+import {
+  Wallet, Receipt, BarChart3, Tags, ListChecks, Settings as SettingsIcon,
+} from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
@@ -12,10 +14,10 @@ import Visualization from "./pages/Visualization";
 import Categorize from "./pages/Categorize";
 
 const nav = [
-  ["/", "Transactions"],
-  ["/visualize", "Visualize"],
-  ["/categorize", "Categorize"],
-  ["/rules", "Rules"],
+  ["/", "Transactions", Receipt],
+  ["/visualize", "Visualize", BarChart3],
+  ["/categorize", "Categorize", Tags],
+  ["/rules", "Rules", ListChecks],
 ] as const;
 
 export default function App() {
@@ -25,10 +27,14 @@ export default function App() {
         <div className="min-h-screen bg-background text-foreground">
           <header className="border-b">
             <nav className="mx-auto flex max-w-5xl items-center gap-4 p-4">
-              <span className="font-bold">Vibe Badget</span>
-              {nav.map(([to, label]) => (
+              <span className="flex items-center gap-2 font-bold">
+                <Wallet size={18} />
+                Vibe Badget
+              </span>
+              {nav.map(([to, label, Icon]) => (
                 <NavLink key={to} to={to} end className={({ isActive }) =>
-                  isActive ? "font-medium underline" : "text-muted-foreground"}>
+                  cn("flex items-center gap-1.5", isActive ? "font-medium underline" : "text-muted-foreground")}>
+                  <Icon size={14} />
                   {label}
                 </NavLink>
               ))}
