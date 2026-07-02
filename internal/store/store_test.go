@@ -164,3 +164,63 @@ func TestInsertTransactionsPersistsCategory(t *testing.T) {
 		t.Fatal("imported row not found")
 	}
 }
+
+func TestDeleteAccountCascadesTransactions(t *testing.T) {
+	s := newStore(t)
+
+	_, err := s.InsertTransactions([]model.Transaction{
+		{AccountName: "ToDelete", PartnerName: "X", AmountEUR: -1, DedupeHash: "cascade-1"},
+		{AccountName: "ToDelete", PartnerName: "Y", AmountEUR: -2, DedupeHash: "cascade-2"},
+		{AccountName: "Keep", PartnerName: "Z", AmountEUR: -3, DedupeHash: "cascade-3"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	accounts, err := s.ListAccounts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var toDeleteID int64
+	for _, a := range accounts {
+		if a.Name == "ToDelete" {
+			toDeleteID = a.ID
+		}
+	}
+	if toDeleteID == 0 {
+		t.Fatal("ToDelete account not found")
+	}
+
+	if err := s.DeleteAccount(toDeleteID); err != nil {
+		t.Fatalf("DeleteAccount: %v", err)
+	}
+
+	accountsAfter, err := s.ListAccounts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range accountsAfter {
+		if a.Name == "ToDelete" {
+			t.Fatal("account still present after delete")
+		}
+	}
+
+	txns, err := s.ListTransactions(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tx := range txns {
+		if tx.PartnerName == "X" || tx.PartnerName == "Y" {
+			t.Fatalf("transaction from deleted account still present: %+v", tx)
+		}
+	}
+	var keptFound bool
+	for _, tx := range txns {
+		if tx.PartnerName == "Z" {
+			keptFound = true
+		}
+	}
+	if !keptFound {
+		t.Fatal("transaction from the other account should not have been deleted")
+	}
+}

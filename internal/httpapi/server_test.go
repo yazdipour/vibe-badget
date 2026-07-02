@@ -368,3 +368,46 @@ func TestUploadNativeFormatResolvesCategory(t *testing.T) {
 		t.Fatalf("row with unknown category should have been skipped, found in response: %s", rec2.Body)
 	}
 }
+
+func TestDeleteAccount(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	s := store.New(d)
+	h := NewServer(s, os.DirFS("."))
+
+	_, err := s.InsertTransactions([]model.Transaction{
+		{AccountName: "DeleteMe", PartnerName: "X", AmountEUR: -1, DedupeHash: "http-cascade-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/accounts", nil))
+	var accounts []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &accounts)
+	var accountID int64
+	for _, a := range accounts {
+		if a.Name == "DeleteMe" {
+			accountID = a.ID
+		}
+	}
+	if accountID == 0 {
+		t.Fatal("DeleteMe account not found")
+	}
+
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest("DELETE", fmt.Sprintf("/api/accounts/%d", accountID), nil))
+	if rec2.Code != 204 {
+		t.Fatalf("want 204, got %d %s", rec2.Code, rec2.Body)
+	}
+
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, httptest.NewRequest("GET", "/api/transactions", nil))
+	if bytes.Contains(rec3.Body.Bytes(), []byte("DeleteMe")) {
+		t.Fatalf("deleted account's data still present: %s", rec3.Body)
+	}
+}
