@@ -224,3 +224,64 @@ func TestDeleteAccountCascadesTransactions(t *testing.T) {
 		t.Fatal("transaction from the other account should not have been deleted")
 	}
 }
+
+func TestListCategoriesIncludesKind(t *testing.T) {
+	s := newStore(t)
+
+	cats, err := s.ListCategories()
+	if err != nil {
+		t.Fatalf("ListCategories: %v", err)
+	}
+	var found bool
+	for _, c := range cats {
+		if c.Kind != "income" && c.Kind != "expense" {
+			t.Fatalf("category %q has invalid kind %q", c.Name, c.Kind)
+		}
+		if c.Name == "Groceries" {
+			found = true
+			if c.Kind != "expense" {
+				t.Fatalf("want seeded Groceries to default to expense, got %q", c.Kind)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("Groceries category not found")
+	}
+}
+
+func TestUpdateCategoryKind(t *testing.T) {
+	s := newStore(t)
+
+	c, err := s.CreateCategory("Freelance Income", "Wallet", "#16a34a", "#ffffff")
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	if c.Kind != "expense" {
+		t.Fatalf("want new category to default to expense, got %q", c.Kind)
+	}
+
+	updated, err := s.UpdateCategoryKind(c.ID, "income")
+	if err != nil {
+		t.Fatalf("UpdateCategoryKind: %v", err)
+	}
+	if updated.Kind != "income" || updated.ID != c.ID || updated.Name != "Freelance Income" {
+		t.Fatalf("unexpected updated category: %+v", updated)
+	}
+
+	cats, err := s.ListCategories()
+	if err != nil {
+		t.Fatalf("ListCategories: %v", err)
+	}
+	var persisted bool
+	for _, cat := range cats {
+		if cat.ID == c.ID {
+			persisted = true
+			if cat.Kind != "income" {
+				t.Fatalf("kind update did not persist, got %q", cat.Kind)
+			}
+		}
+	}
+	if !persisted {
+		t.Fatal("updated category not found in list")
+	}
+}

@@ -70,3 +70,96 @@ func TestOpenMigratesCategoryColumns(t *testing.T) {
 	}
 	d2.Close()
 }
+
+func TestOpenMigratesCategoryKindInfersFromTransactions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old-kind.db")
+
+	// Simulate a pre-existing database whose categories table predates
+	// `kind`, with two categories and transactions establishing a clear
+	// net-positive (income) and net-negative (expense) history.
+	oldDB, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`CREATE TABLE categories (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL UNIQUE,
+		icon TEXT NOT NULL DEFAULT 'Tag',
+		color TEXT NOT NULL DEFAULT '#6b7280',
+		icon_color TEXT NOT NULL DEFAULT '#ffffff',
+		created_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`CREATE TABLE accounts (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`CREATE TABLE transactions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		account_id INTEGER NOT NULL,
+		category_id INTEGER,
+		amount_eur REAL NOT NULL,
+		booking_date TEXT NOT NULL DEFAULT '',
+		partner_name TEXT NOT NULL DEFAULT '',
+		dedupe_hash TEXT NOT NULL DEFAULT ''
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`INSERT INTO categories(id,name) VALUES(1,'Salary'),(2,'Groceries')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`INSERT INTO accounts(id,name) VALUES(1,'Main')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`INSERT INTO transactions(account_id,category_id,amount_eur,dedupe_hash) VALUES
+		(1,1,2000,'a'), (1,2,-50,'b'), (1,2,-30,'c')`); err != nil {
+		t.Fatal(err)
+	}
+	oldDB.Close()
+
+	d, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	var salaryKind, groceriesKind string
+	if err := d.QueryRow(`SELECT kind FROM categories WHERE name='Salary'`).Scan(&salaryKind); err != nil {
+		t.Fatalf("query Salary kind: %v", err)
+	}
+	if err := d.QueryRow(`SELECT kind FROM categories WHERE name='Groceries'`).Scan(&groceriesKind); err != nil {
+		t.Fatalf("query Groceries kind: %v", err)
+	}
+	if salaryKind != "income" {
+		t.Fatalf("want Salary inferred as income (net +2000), got %q", salaryKind)
+	}
+	if groceriesKind != "expense" {
+		t.Fatalf("want Groceries inferred as expense (net -80), got %q", groceriesKind)
+	}
+	d.Close()
+
+	// Manually flip Groceries to income, then reopen — the migration must
+	// NOT re-run its seed and stomp the user's manual choice.
+	d2, err := Open(path)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	if _, err := d2.Exec(`UPDATE categories SET kind='income' WHERE name='Groceries'`); err != nil {
+		t.Fatal(err)
+	}
+	d2.Close()
+
+	d3, err := Open(path)
+	if err != nil {
+		t.Fatalf("third Open: %v", err)
+	}
+	defer d3.Close()
+	var groceriesKindAfter string
+	if err := d3.QueryRow(`SELECT kind FROM categories WHERE name='Groceries'`).Scan(&groceriesKindAfter); err != nil {
+		t.Fatalf("query Groceries kind after manual edit: %v", err)
+	}
+	if groceriesKindAfter != "income" {
+		t.Fatalf("manual kind edit must survive reopening, got %q", groceriesKindAfter)
+	}
+}

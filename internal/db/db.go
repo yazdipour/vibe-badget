@@ -79,6 +79,54 @@ func migrateCategoryColumns(d *sql.DB) error {
 	return nil
 }
 
+// migrateCategoryKind adds an income/expense `kind` column to a categories
+// table that predates it, and — only at the moment the column is first
+// added — seeds each category's kind from its transaction history (net
+// positive amount -> income, net negative or no transactions -> expense).
+// After this one-time seed, kind is fully explicit and never recomputed,
+// so a user's manual drag-and-drop choice always survives a restart.
+func migrateCategoryKind(d *sql.DB) error {
+	rows, err := d.Query(`PRAGMA table_info(categories)`)
+	if err != nil {
+		return err
+	}
+	hasKind := false
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "kind" {
+			hasKind = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+
+	if hasKind {
+		return nil
+	}
+
+	if _, err := d.Exec(`ALTER TABLE categories ADD COLUMN kind TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('income','expense'))`); err != nil {
+		return err
+	}
+	_, err = d.Exec(`
+		UPDATE categories SET kind = 'income'
+		WHERE id IN (
+			SELECT category_id FROM transactions
+			WHERE category_id IS NOT NULL
+			GROUP BY category_id
+			HAVING SUM(amount_eur) > 0
+		)
+	`)
+	return err
+}
+
 // Open opens (or creates) the SQLite database, applies the schema and seed
 // data, and returns a ready connection. Use ":memory:" in tests.
 func Open(path string) (*sql.DB, error) {
@@ -101,6 +149,10 @@ func Open(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	if err := migrateCategoryColumns(d); err != nil {
+		d.Close()
+		return nil, err
+	}
+	if err := migrateCategoryKind(d); err != nil {
 		d.Close()
 		return nil, err
 	}

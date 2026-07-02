@@ -128,7 +128,7 @@ func (s *Store) ListTransactions(accountID int64) ([]model.Transaction, error) {
 }
 
 func (s *Store) ListCategories() ([]model.Category, error) {
-	rows, err := s.db.Query(`SELECT id,name,icon,color,icon_color FROM categories ORDER BY name`)
+	rows, err := s.db.Query(`SELECT id,name,icon,color,icon_color,kind FROM categories ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (s *Store) ListCategories() ([]model.Category, error) {
 	out := make([]model.Category, 0)
 	for rows.Next() {
 		var c model.Category
-		if err := rows.Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor, &c.Kind); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -149,16 +149,24 @@ func (s *Store) CreateCategory(name, icon, color, iconColor string) (model.Categ
 	err := s.db.QueryRow(
 		`INSERT INTO categories(name,icon,color,icon_color) VALUES(?,?,?,?)
 		 ON CONFLICT(name) DO UPDATE SET icon=excluded.icon, color=excluded.color, icon_color=excluded.icon_color
-		 RETURNING id,name,icon,color,icon_color`,
-		name, icon, color, iconColor).Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor)
+		 RETURNING id,name,icon,color,icon_color,kind`,
+		name, icon, color, iconColor).Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor, &c.Kind)
 	return c, err
 }
 
 func (s *Store) UpdateCategoryAppearance(id int64, icon, color, iconColor string) (model.Category, error) {
 	var c model.Category
 	err := s.db.QueryRow(
-		`UPDATE categories SET icon=?, color=?, icon_color=? WHERE id=? RETURNING id,name,icon,color,icon_color`,
-		icon, color, iconColor, id).Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor)
+		`UPDATE categories SET icon=?, color=?, icon_color=? WHERE id=? RETURNING id,name,icon,color,icon_color,kind`,
+		icon, color, iconColor, id).Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor, &c.Kind)
+	return c, err
+}
+
+func (s *Store) UpdateCategoryKind(id int64, kind string) (model.Category, error) {
+	var c model.Category
+	err := s.db.QueryRow(
+		`UPDATE categories SET kind=? WHERE id=? RETURNING id,name,icon,color,icon_color,kind`,
+		kind, id).Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor, &c.Kind)
 	return c, err
 }
 

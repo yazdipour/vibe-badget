@@ -32,6 +32,7 @@ type Category struct {
 	Icon      string `json:"icon"`
 	Color     string `json:"color"`
 	IconColor string `json:"icon_color"`
+	Kind      string `json:"kind"`
 }
 
 type Rule struct {

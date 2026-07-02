@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS categories (
   icon       TEXT NOT NULL DEFAULT 'Tag',
   color      TEXT NOT NULL DEFAULT '#6b7280',
   icon_color TEXT NOT NULL DEFAULT '#ffffff',
+  kind       TEXT NOT NULL DEFAULT 'expense' CHECK(kind IN ('income','expense')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
