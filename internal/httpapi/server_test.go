@@ -286,6 +286,36 @@ func TestUpdateCategoryAppearance(t *testing.T) {
 	}
 }
 
+func TestDeleteCategory(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	h := NewServer(store.New(d), os.DirFS("."))
+
+	req := httptest.NewRequest("POST", "/api/categories",
+		bytes.NewBufferString(`{"name":"Temporary","icon":"Tag","color":"#607D8B","icon_color":"#ffffff"}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 201 {
+		t.Fatalf("create category: %d %s", rec.Code, rec.Body)
+	}
+	var created struct {
+		ID int64 `json:"id"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &created)
+
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest("DELETE", fmt.Sprintf("/api/categories/%d", created.ID), nil))
+	if rec2.Code != 204 {
+		t.Fatalf("want 204, got %d %s", rec2.Code, rec2.Body)
+	}
+
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, httptest.NewRequest("GET", "/api/categories", nil))
+	if bytes.Contains(rec3.Body.Bytes(), []byte("Temporary")) {
+		t.Fatalf("category still present after delete: %s", rec3.Body)
+	}
+}
+
 func TestDeleteTransaction(t *testing.T) {
 	d, _ := db.Open(":memory:")
 	defer d.Close()
@@ -486,7 +516,7 @@ func TestSuggestRulesStreams(t *testing.T) {
 		t.Fatalf("expected at least a log line and a done line, got %d: %s", len(lines), rec.Body)
 	}
 	var last struct {
-		Done        bool                        `json:"done"`
+		Done        bool                       `json:"done"`
 		Suggestions []aiRuleSuggestionResponse `json:"suggestions"`
 	}
 	if err := json.Unmarshal(lines[len(lines)-1], &last); err != nil {
@@ -561,7 +591,7 @@ func TestSuggestRulesNeverSuggestsIgnore(t *testing.T) {
 	}
 	lines := bytes.Split(bytes.TrimSpace(rec.Body.Bytes()), []byte("\n"))
 	var last struct {
-		Done        bool                        `json:"done"`
+		Done        bool                       `json:"done"`
 		Suggestions []aiRuleSuggestionResponse `json:"suggestions"`
 	}
 	if err := json.Unmarshal(lines[len(lines)-1], &last); err != nil {

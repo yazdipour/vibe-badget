@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
-import { ArrowLeftRight, GripVertical } from "lucide-react";
+import { ArrowLeftRight, GripVertical, Shuffle, Trash2 } from "lucide-react";
 import { api, type Category, type Rule, type CategorizeLogEntry } from "@/lib/api";
-import { CATEGORY_ICONS, resolveIcon } from "@/lib/icons";
+import { CATEGORY_ICONS, resolveIcon, suggestCategoryAppearance } from "@/lib/icons";
 import { PALETTE, readableTextColor } from "@/lib/colors";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -27,7 +27,7 @@ type NewRuleDraft = { field: string; match_type: string; pattern: string };
 
 function CategoryRow({
   category, rules, isExpanded, editDraft, newRule,
-  onToggleExpand, onEditDraftChange, onNewRuleChange, onDeleteRule, onSaveAppearance, onAddRule, onToggleKind,
+  onToggleExpand, onEditDraftChange, onNewRuleChange, onDeleteRule, onSaveAppearance, onAddRule, onToggleKind, onDeleteCategory,
 }: {
   category: Category;
   rules: Rule[];
@@ -41,6 +41,7 @@ function CategoryRow({
   onSaveAppearance: () => void;
   onAddRule: () => void;
   onToggleKind: () => void;
+  onDeleteCategory: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: category.id });
   const Icon = resolveIcon(category.icon);
@@ -152,7 +153,13 @@ function CategoryRow({
                   White
                 </button>
               </div>
-              <Button size="sm" onClick={onSaveAppearance}>Save</Button>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={onSaveAppearance}>Save</Button>
+                <Button size="sm" variant="destructive" onClick={onDeleteCategory}>
+                  <Trash2 size={14} />
+                  Delete
+                </Button>
+              </div>
             </div>
           )}
           <div className="flex flex-wrap items-end gap-2">
@@ -267,6 +274,16 @@ export default function Categorize() {
     }
   }
 
+  function pickNewCategoryAppearance() {
+    const suggested = suggestCategoryAppearance(newCategory.name);
+    setNewCategory({
+      ...newCategory,
+      icon: suggested.icon,
+      color: suggested.color,
+      iconColor: suggested.icon_color,
+    });
+  }
+
   async function addCategoryRule(categoryId: number) {
     if (!newRule.pattern.trim()) { toast.error("pattern required"); return; }
     try {
@@ -282,6 +299,22 @@ export default function Categorize() {
     try {
       await api.deleteRule(id);
       reload();
+    } catch (e) {
+      toast.error(String(e));
+    }
+  }
+
+  async function deleteCategory(category: Category) {
+    if (!window.confirm(`Delete category "${category.name}"? Matching rules will be deleted and transactions will become uncategorized.`)) {
+      return;
+    }
+    try {
+      await api.deleteCategory(category.id);
+      setCategories((prev) => prev.filter((c) => c.id !== category.id));
+      setExpandedCategory(null);
+      setEditDraft(null);
+      reload();
+      toast.success("Category deleted");
     } catch (e) {
       toast.error(String(e));
     }
@@ -453,6 +486,7 @@ export default function Categorize() {
                       onSaveAppearance={() => saveCategoryAppearance(c.id)}
                       onAddRule={() => addCategoryRule(c.id)}
                       onToggleKind={() => toggleCategoryKind(c)}
+                      onDeleteCategory={() => deleteCategory(c)}
                     />
                   ))
                 )}
@@ -476,6 +510,7 @@ export default function Categorize() {
                       onSaveAppearance={() => saveCategoryAppearance(c.id)}
                       onAddRule={() => addCategoryRule(c.id)}
                       onToggleKind={() => toggleCategoryKind(c)}
+                      onDeleteCategory={() => deleteCategory(c)}
                     />
                   ))
                 )}
@@ -490,6 +525,10 @@ export default function Categorize() {
               value={newCategory.name}
               onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
             />
+            <Button type="button" variant="outline" size="sm" onClick={pickNewCategoryAppearance}>
+              <Shuffle size={14} />
+              Pick look
+            </Button>
             <div className="flex flex-wrap gap-1">
               {CATEGORY_ICONS.map((iconName) => {
                 const Icon = resolveIcon(iconName);

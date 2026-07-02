@@ -202,6 +202,11 @@ func (s *Store) DeleteAccount(id int64) error {
 	return err
 }
 
+func (s *Store) DeleteCategory(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM categories WHERE id=?`, id)
+	return err
+}
+
 func (s *Store) GetSettings() (map[string]string, error) {
 	rows, err := s.db.Query(`SELECT key,value FROM settings`)
 	if err != nil {

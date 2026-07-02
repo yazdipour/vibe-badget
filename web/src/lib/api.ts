@@ -53,6 +53,7 @@ export const api = {
     fetch(`/api/categories/${id}/name`, {
       method: "PUT", body: JSON.stringify({ name }), headers: { "Content-Type": "application/json" },
     }).then(j<Category>),
+  deleteCategory: (id: number) => fetch(`/api/categories/${id}`, { method: "DELETE" }).then(j<void>),
   rules: () => fetch("/api/rules").then(j<Rule[]>),
   createRule: (r: Omit<Rule, "id">) =>
     fetch("/api/rules", { method: "POST", body: JSON.stringify(r), headers: { "Content-Type": "application/json" } }).then(j<Rule>),

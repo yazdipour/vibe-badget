@@ -168,6 +168,57 @@ func migratePruneDefaultSeedRules(d *sql.DB) error {
 	return err
 }
 
+// migrateMarkExistingDefaultSeeded makes the seed script one-time for users
+// upgrading from older versions. If a database already has any categories, we
+// assume its starter set has been initialized before, so deleted defaults must
+// not be recreated by the new marker-guarded seed.sql.
+func migrateMarkExistingDefaultSeeded(d *sql.DB) error {
+	var marker string
+	err := d.QueryRow(`SELECT value FROM settings WHERE key='default_seed_v2'`).Scan(&marker)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+
+	var categories int
+	if err := d.QueryRow(`SELECT count(*) FROM categories`).Scan(&categories); err != nil {
+		return err
+	}
+	if categories == 0 {
+		return nil
+	}
+	_, err = d.Exec(`INSERT INTO settings (key, value) VALUES ('default_seed_v2', 'true')`)
+	return err
+}
+
+func migrateRenameDefaultIncomeToSalary(d *sql.DB) error {
+	var marker string
+	err := d.QueryRow(`SELECT value FROM settings WHERE key='default_income_renamed_salary_v1'`).Scan(&marker)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+
+	_, err = d.Exec(`
+		UPDATE categories SET name='Salary'
+		WHERE name='Income'
+		  AND kind='income'
+		  AND icon='Wallet'
+		  AND color='#2E7D32'
+		  AND icon_color='#ffffff'
+		  AND NOT EXISTS (SELECT 1 FROM categories WHERE name='Salary')
+	`)
+	if err != nil {
+		return err
+	}
+	_, err = d.Exec(`INSERT INTO settings (key, value) VALUES ('default_income_renamed_salary_v1', 'true')`)
+	return err
+}
+
 // Open opens (or creates) the SQLite database, applies the schema and seed
 // data, and returns a ready connection. Use ":memory:" in tests.
 func Open(path string) (*sql.DB, error) {
@@ -197,7 +248,15 @@ func Open(path string) (*sql.DB, error) {
 		d.Close()
 		return nil, err
 	}
+	if err := migrateMarkExistingDefaultSeeded(d); err != nil {
+		d.Close()
+		return nil, err
+	}
 	if err := execScript(d, seedSQL); err != nil {
+		d.Close()
+		return nil, err
+	}
+	if err := migrateRenameDefaultIncomeToSalary(d); err != nil {
 		d.Close()
 		return nil, err
 	}

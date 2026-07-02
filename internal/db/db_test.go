@@ -35,18 +35,106 @@ func TestOpenSeedsIncomeCategoriesOnFreshDatabase(t *testing.T) {
 	}
 	defer d.Close()
 
-	var incomeKind, savingsKind string
-	if err := d.QueryRow(`SELECT kind FROM categories WHERE name='Income'`).Scan(&incomeKind); err != nil {
-		t.Fatalf("query Income kind: %v", err)
+	var salaryKind, savingsKind string
+	if err := d.QueryRow(`SELECT kind FROM categories WHERE name='Salary'`).Scan(&salaryKind); err != nil {
+		t.Fatalf("query Salary kind: %v", err)
 	}
 	if err := d.QueryRow(`SELECT kind FROM categories WHERE name='Savings'`).Scan(&savingsKind); err != nil {
 		t.Fatalf("query Savings kind: %v", err)
 	}
-	if incomeKind != "income" {
-		t.Fatalf("want Income category seeded with kind='income', got %q", incomeKind)
+	if salaryKind != "income" {
+		t.Fatalf("want Salary category seeded with kind='income', got %q", salaryKind)
 	}
 	if savingsKind != "income" {
 		t.Fatalf("want Savings category seeded with kind='income', got %q", savingsKind)
+	}
+}
+
+func TestOpenRenamesOldDefaultIncomeCategoryToSalary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "income-rename.db")
+
+	oldDB, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := execScript(oldDB, schemaSQL); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`
+		INSERT INTO categories(name, icon, color, icon_color, kind)
+		VALUES('Income', 'Wallet', '#2E7D32', '#ffffff', 'income')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	oldDB.Close()
+
+	d, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer d.Close()
+
+	var salaryCount, incomeCount int
+	d.QueryRow(`SELECT count(*) FROM categories WHERE name='Salary'`).Scan(&salaryCount)
+	d.QueryRow(`SELECT count(*) FROM categories WHERE name='Income'`).Scan(&incomeCount)
+	if salaryCount != 1 || incomeCount != 0 {
+		t.Fatalf("want default Income renamed to Salary, salary=%d income=%d", salaryCount, incomeCount)
+	}
+}
+
+func TestOpenDoesNotRecreateDeletedDefaultCategories(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mutable-defaults.db")
+
+	d, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := d.Exec(`DELETE FROM categories WHERE name='Groceries'`); err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+
+	d2, err := Open(path)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	defer d2.Close()
+
+	var count int
+	if err := d2.QueryRow(`SELECT count(*) FROM categories WHERE name='Groceries'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("deleted default category was recreated, count=%d", count)
+	}
+}
+
+func TestOpenDoesNotSeedDefaultsIntoExistingCategoryDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "existing-categories.db")
+
+	oldDB, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := execScript(oldDB, schemaSQL); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec(`INSERT INTO categories(name, kind) VALUES('Custom', 'expense')`); err != nil {
+		t.Fatal(err)
+	}
+	oldDB.Close()
+
+	d, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer d.Close()
+
+	var customCount, groceryCount int
+	d.QueryRow(`SELECT count(*) FROM categories WHERE name='Custom'`).Scan(&customCount)
+	d.QueryRow(`SELECT count(*) FROM categories WHERE name='Groceries'`).Scan(&groceryCount)
+	if customCount != 1 || groceryCount != 0 {
+		t.Fatalf("want only existing custom category, custom=%d groceries=%d", customCount, groceryCount)
 	}
 }
 

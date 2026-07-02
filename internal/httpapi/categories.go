@@ -119,3 +119,16 @@ func (s *Server) updateCategoryKind(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, c)
 }
+
+func (s *Server) deleteCategory(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", 400)
+		return
+	}
+	if err := s.store.DeleteCategory(id); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
