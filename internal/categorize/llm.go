@@ -238,15 +238,21 @@ func (l *LLM) SuggestRules(ctx context.Context, partners []PartnerCategory, exis
 			"rules already cover these patterns, do not repeat them: %s\n\n"+
 			"Partners and their categories:\n%s\n\n"+
 			"Categories available: %s\n\n"+
-			"Suggest rules to automatically categorize future transactions from these merchants. Prefer "+
-			"a short, generic \"keyword\" pattern that captures just the merchant's brand name and would "+
-			"match all of that brand's variants — do NOT include store numbers, branch codes, or city/"+
-			"location names in the pattern. For example, if you see \"KAUFLAND DUESSELDORF 6\", "+
-			"\"KAUFLAND DUESSELDORF 4\", and \"KAUFLAND DUESSELDORF 2\" in the list, suggest ONE rule "+
-			"with pattern \"KAUFLAND\" and match_type \"keyword\" — not three separate rules with the "+
-			"full partner names. If multiple partners in the list share the same brand, consolidate them "+
-			"into a single suggested rule instead of one rule per partner. Only use match_type \"exact\" "+
-			"when a partner name has no variable suffix at all and is always identical. "+
+			"Your goal is to produce the SMALLEST possible set of keyword rules that still correctly "+
+			"covers every partner listed. Before answering, group the partners by shared words (case-"+
+			"insensitive), not just by shared brand:\n"+
+			"1. Same brand, different branch — strip store numbers, branch codes, and city/location "+
+			"names. Example: \"KAUFLAND DUESSELDORF 6\", \"KAUFLAND DUESSELDORF 4\", and "+
+			"\"KAUFLAND DUESSELDORF 2\" all become ONE rule: pattern \"KAUFLAND\", match_type \"keyword\".\n"+
+			"2. Different brands, same merchant type — if two or more DIFFERENT partner names share a "+
+			"common word that identifies the same kind of business (even though the rest of the name "+
+			"differs), use that shared word as ONE rule instead of a separate rule per partner. Example: "+
+			"\"Lenau Apotheke\" and \"Shop Apotheke\" are different pharmacies, but both contain "+
+			"\"Apotheke\" — suggest ONE rule: pattern \"Apotheke\", match_type \"keyword\", rather than "+
+			"two rules for the two full names.\n"+
+			"Only use match_type \"exact\" when a partner name has no variable suffix at all, shares no "+
+			"generalizable word with any other partner, and is always identical as-is. Never propose two "+
+			"rules mapping to the same category when one shared keyword could cover both. "+
 			"Reply with ONLY a JSON array of objects of the form "+
 			"{\"pattern\":\"<text>\",\"match_type\":\"exact\"|\"keyword\",\"category\":\"<name>\",\"reason\":\"<reason>\"}, nothing else.",
 		strings.Join(existingPatterns, ", "), strings.Join(pcLines, "\n"), strings.Join(categories, ", "))
