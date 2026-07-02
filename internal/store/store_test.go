@@ -105,6 +105,45 @@ func TestUpdateCategoryAppearance(t *testing.T) {
 	}
 }
 
+func TestUpdateCategoryName(t *testing.T) {
+	s := newStore(t)
+
+	c, err := s.CreateCategory("Old Name", "Tag", "#6b7280", "#ffffff")
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+	other, err := s.CreateCategory("Taken Name", "Tag", "#6b7280", "#ffffff")
+	if err != nil {
+		t.Fatalf("CreateCategory: %v", err)
+	}
+
+	updated, err := s.UpdateCategoryName(c.ID, "New Name")
+	if err != nil {
+		t.Fatalf("UpdateCategoryName: %v", err)
+	}
+	if updated.ID != c.ID || updated.Name != "New Name" || updated.Icon != "Tag" || updated.Color != "#6b7280" {
+		t.Fatalf("unexpected updated category: %+v", updated)
+	}
+
+	catsAfter, err := s.ListCategories()
+	if err != nil {
+		t.Fatalf("ListCategories: %v", err)
+	}
+	var persisted bool
+	for _, cat := range catsAfter {
+		if cat.ID == c.ID && cat.Name == "New Name" {
+			persisted = true
+		}
+	}
+	if !persisted {
+		t.Fatal("renamed category not found in list")
+	}
+
+	if _, err := s.UpdateCategoryName(c.ID, other.Name); err == nil {
+		t.Fatal("want error renaming to an already-taken name, got nil")
+	}
+}
+
 func TestDeleteTransaction(t *testing.T) {
 	s := newStore(t)
 	_, err := s.InsertTransactions([]model.Transaction{

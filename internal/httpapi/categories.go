@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 func (s *Server) listCategories(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +64,35 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := s.store.UpdateCategoryAppearance(id, in.Icon, in.Color, in.IconColor)
 	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, 200, c)
+}
+
+func (s *Server) updateCategoryName(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", 400)
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	name := ""
+	if err := json.NewDecoder(r.Body).Decode(&in); err == nil {
+		name = strings.TrimSpace(in.Name)
+	}
+	if name == "" {
+		http.Error(w, "name required", 400)
+		return
+	}
+	c, err := s.store.UpdateCategoryName(id, name)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			http.Error(w, "a category with that name already exists", 400)
+			return
+		}
 		http.Error(w, err.Error(), 500)
 		return
 	}

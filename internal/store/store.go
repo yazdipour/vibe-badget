@@ -162,6 +162,14 @@ func (s *Store) UpdateCategoryAppearance(id int64, icon, color, iconColor string
 	return c, err
 }
 
+func (s *Store) UpdateCategoryName(id int64, name string) (model.Category, error) {
+	var c model.Category
+	err := s.db.QueryRow(
+		`UPDATE categories SET name=? WHERE id=? RETURNING id,name,icon,color,icon_color,kind`,
+		name, id).Scan(&c.ID, &c.Name, &c.Icon, &c.Color, &c.IconColor, &c.Kind)
+	return c, err
+}
+
 func (s *Store) UpdateCategoryKind(id int64, kind string) (model.Category, error) {
 	var c model.Category
 	err := s.db.QueryRow(

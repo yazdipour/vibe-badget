@@ -22,7 +22,7 @@ function sourceVariant(source: string): "default" | "secondary" | "outline" {
   return "outline";
 }
 
-type EditDraft = { icon: string; color: string; iconColor: string };
+type EditDraft = { name: string; icon: string; color: string; iconColor: string };
 type NewRuleDraft = { field: string; match_type: string; pattern: string };
 
 function CategoryRow({
@@ -93,6 +93,12 @@ function CategoryRow({
           ))}
           {editDraft && (
             <div className="space-y-2 border-b pb-2">
+              <input
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                placeholder="Category name"
+                value={editDraft.name}
+                onChange={(e) => onEditDraftChange({ ...editDraft, name: e.target.value })}
+              />
               <div className="flex flex-wrap gap-1">
                 {CATEGORY_ICONS.map((iconName) => {
                   const IconOption = resolveIcon(iconName);
@@ -219,7 +225,7 @@ export default function Categorize() {
       setEditDraft(null);
     } else {
       setExpandedCategory(c.id);
-      setEditDraft({ icon: c.icon, color: c.color, iconColor: c.icon_color });
+      setEditDraft({ name: c.name, icon: c.icon, color: c.color, iconColor: c.icon_color });
     }
   }
 
@@ -283,10 +289,16 @@ export default function Categorize() {
 
   async function saveCategoryAppearance(id: number) {
     if (!editDraft) return;
+    const name = editDraft.name.trim();
+    if (!name) { toast.error("name required"); return; }
     try {
-      const updated = await api.updateCategoryAppearance(id, {
+      let updated = await api.updateCategoryAppearance(id, {
         icon: editDraft.icon, color: editDraft.color, icon_color: editDraft.iconColor,
       });
+      const current = categories.find((c) => c.id === id);
+      if (current && current.name !== name) {
+        updated = await api.updateCategoryName(id, name);
+      }
       setCategories((prev) => prev.map((c) => (c.id === id ? updated : c)));
     } catch (e) {
       toast.error(String(e));

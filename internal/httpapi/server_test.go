@@ -639,3 +639,75 @@ func TestUpdateCategoryKind(t *testing.T) {
 		t.Fatalf("kind update did not persist: %s", rec3.Body)
 	}
 }
+
+func TestUpdateCategoryName(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	h := NewServer(store.New(d), os.DirFS("."))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/categories", nil))
+	var cats []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &cats)
+	if len(cats) < 2 {
+		t.Fatal("need at least 2 seeded categories")
+	}
+	target := cats[0]
+	other := cats[1]
+
+	// empty name -> 400
+	badReq := httptest.NewRequest("PUT", fmt.Sprintf("/api/categories/%d/name", target.ID),
+		bytes.NewBufferString(`{"name":""}`))
+	badRec := httptest.NewRecorder()
+	h.ServeHTTP(badRec, badReq)
+	if badRec.Code != 400 {
+		t.Fatalf("want 400 for empty name, got %d", badRec.Code)
+	}
+
+	// renaming to an existing category's name -> 400
+	dupReq := httptest.NewRequest("PUT", fmt.Sprintf("/api/categories/%d/name", target.ID),
+		bytes.NewBufferString(fmt.Sprintf(`{"name":%q}`, other.Name)))
+	dupRec := httptest.NewRecorder()
+	h.ServeHTTP(dupRec, dupReq)
+	if dupRec.Code != 400 {
+		t.Fatalf("want 400 for duplicate name, got %d %s", dupRec.Code, dupRec.Body)
+	}
+
+	// valid rename -> 200
+	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/categories/%d/name", target.ID),
+		bytes.NewBufferString(`{"name":"Renamed Category"}`))
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req)
+	if rec2.Code != 200 {
+		t.Fatalf("want 200, got %d %s", rec2.Code, rec2.Body)
+	}
+	var updated struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	json.Unmarshal(rec2.Body.Bytes(), &updated)
+	if updated.ID != target.ID || updated.Name != "Renamed Category" {
+		t.Fatalf("unexpected response: %s", rec2.Body)
+	}
+
+	// confirm it stuck
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, httptest.NewRequest("GET", "/api/categories", nil))
+	var catsAfter []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	json.Unmarshal(rec3.Body.Bytes(), &catsAfter)
+	var stuck bool
+	for _, c := range catsAfter {
+		if c.ID == target.ID && c.Name == "Renamed Category" {
+			stuck = true
+		}
+	}
+	if !stuck {
+		t.Fatalf("name update did not persist: %s", rec3.Body)
+	}
+}

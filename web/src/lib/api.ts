@@ -49,6 +49,10 @@ export const api = {
     fetch(`/api/categories/${id}/kind`, {
       method: "PUT", body: JSON.stringify({ kind }), headers: { "Content-Type": "application/json" },
     }).then(j<Category>),
+  updateCategoryName: (id: number, name: string) =>
+    fetch(`/api/categories/${id}/name`, {
+      method: "PUT", body: JSON.stringify({ name }), headers: { "Content-Type": "application/json" },
+    }).then(j<Category>),
   rules: () => fetch("/api/rules").then(j<Rule[]>),
   createRule: (r: Omit<Rule, "id">) =>
     fetch("/api/rules", { method: "POST", body: JSON.stringify(r), headers: { "Content-Type": "application/json" } }).then(j<Rule>),
