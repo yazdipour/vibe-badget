@@ -41,22 +41,30 @@ type chatResp struct {
 	} `json:"choices"`
 }
 
-type classifyResponse struct {
-	Category string `json:"category"`
-	Reason   string `json:"reason"`
+type BatchClassification struct {
+	Category string
 }
 
-// Classify asks the LLM to pick exactly one category for a transaction
-// partner and explain why, then snaps the answer to a known category name.
-func (l *LLM) Classify(ctx context.Context, partner string, categories []string) (string, string, error) {
+// ClassifyBatch asks the LLM to classify multiple merchant partners in a
+// single request, deduplicating what would otherwise be one HTTP call per
+// transaction. The returned map is keyed by the exact partner strings from
+// the input `partners` slice; a partner the LLM didn't answer for (or that
+// doesn't case-insensitively match anything in its reply) is simply absent
+// from the result, and the caller should treat that as unresolved.
+func (l *LLM) ClassifyBatch(ctx context.Context, partners []string, categories []string) (map[string]BatchClassification, error) {
+	if len(partners) == 0 {
+		return map[string]BatchClassification{}, nil
+	}
 	start := time.Now()
-	log.Printf("llm: classifying partner %q", partner)
+	log.Printf("llm: batch classifying %d partner(s)", len(partners))
+
 	prompt := fmt.Sprintf(
-		"You categorise bank transactions. Choose exactly ONE category from this list "+
-			"that best matches the merchant/partner, and give a one-sentence reason. "+
-			"Reply with ONLY a JSON object of the form {\"category\":\"<name>\",\"reason\":\"<reason>\"}, nothing else.\n"+
-			"Categories: %s\nPartner: %s",
-		strings.Join(categories, ", "), partner)
+		"You categorize bank transactions. For each partner listed below, choose exactly ONE category "+
+			"from this list that best matches the merchant/partner. "+
+			"Reply with ONLY a JSON array of objects of the form "+
+			"{\"partner\":\"<name>\",\"category\":\"<name>\"}, one entry per partner listed, nothing else.\n"+
+			"Categories: %s\nPartners:\n%s",
+		strings.Join(categories, ", "), strings.Join(partners, "\n"))
 
 	body, _ := json.Marshal(chatReq{
 		Model:    l.cfg.Model,
@@ -67,8 +75,8 @@ func (l *LLM) Classify(ctx context.Context, partner string, categories []string)
 	url := strings.TrimRight(l.cfg.BaseURL, "/") + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("llm: classify %q failed building request: %v", partner, err)
-		return "", "", err
+		log.Printf("llm: batch classify failed building request: %v", err)
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if l.cfg.APIKey != "" {
@@ -77,53 +85,73 @@ func (l *LLM) Classify(ctx context.Context, partner string, categories []string)
 
 	resp, err := l.hc.Do(req)
 	if err != nil {
-		log.Printf("llm: classify %q failed after %s: %v", partner, time.Since(start), err)
-		return "", "", err
+		log.Printf("llm: batch classify failed after %s: %v", time.Since(start), err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		log.Printf("llm: classify %q got http %d after %s", partner, resp.StatusCode, time.Since(start))
-		return "", "", fmt.Errorf("llm http %d", resp.StatusCode)
+		log.Printf("llm: batch classify got http %d after %s", resp.StatusCode, time.Since(start))
+		return nil, fmt.Errorf("llm http %d", resp.StatusCode)
 	}
 
 	var cr chatResp
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-		log.Printf("llm: classify %q failed decoding response after %s: %v", partner, time.Since(start), err)
-		return "", "", err
+		log.Printf("llm: batch classify failed decoding response after %s: %v", time.Since(start), err)
+		return nil, err
 	}
 	if len(cr.Choices) == 0 {
-		log.Printf("llm: classify %q got no choices after %s", partner, time.Since(start))
-		return "Uncategorized", "", nil
+		log.Printf("llm: batch classify got no choices after %s", time.Since(start))
+		return map[string]BatchClassification{}, nil
 	}
 
-	answer, reason := parseClassifyContent(cr.Choices[0].Message.Content)
+	raw := parseBatchClassifyContent(cr.Choices[0].Message.Content)
+
+	catByLower := map[string]string{}
 	for _, c := range categories {
-		if strings.EqualFold(answer, c) {
-			log.Printf("llm: classify %q -> %q in %s", partner, c, time.Since(start))
-			return c, reason, nil
-		}
+		catByLower[strings.ToLower(c)] = c
 	}
-	log.Printf("llm: classify %q -> Uncategorized in %s", partner, time.Since(start))
-	return "Uncategorized", reason, nil
+	partnerByLower := map[string]string{}
+	for _, p := range partners {
+		partnerByLower[strings.ToLower(strings.TrimSpace(p))] = p
+	}
+
+	out := map[string]BatchClassification{}
+	for _, r := range raw {
+		originalPartner, ok := partnerByLower[strings.ToLower(strings.TrimSpace(r.Partner))]
+		if !ok {
+			continue
+		}
+		category := "Uncategorized"
+		if canonical, ok := catByLower[strings.ToLower(r.Category)]; ok {
+			category = canonical
+		}
+		out[originalPartner] = BatchClassification{Category: category}
+	}
+	log.Printf("llm: batch classify -> %d/%d matched in %s", len(out), len(partners), time.Since(start))
+	return out, nil
 }
 
-// parseClassifyContent extracts the category and reason from the LLM's reply.
-// It expects {"category":"...","reason":"..."}, optionally wrapped in a
-// ```json ... ``` fence, but falls back to treating the raw trimmed content
-// as a bare category name (with no reason) if the model didn't follow the
-// JSON instruction.
-func parseClassifyContent(content string) (category string, reason string) {
+type batchClassifyResponse struct {
+	Partner  string `json:"partner"`
+	Category string `json:"category"`
+}
+
+// parseBatchClassifyContent extracts a JSON array of per-partner
+// classifications from the LLM's reply, optionally wrapped in a
+// ```json ... ``` fence (same tolerant parsing pattern used elsewhere in
+// this package). Returns nil if the content isn't a valid JSON array.
+func parseBatchClassifyContent(content string) []batchClassifyResponse {
 	trimmed := strings.TrimSpace(content)
 	trimmed = strings.TrimPrefix(trimmed, "```json")
 	trimmed = strings.TrimPrefix(trimmed, "```")
 	trimmed = strings.TrimSuffix(trimmed, "```")
 	trimmed = strings.TrimSpace(trimmed)
 
-	var cr classifyResponse
-	if err := json.Unmarshal([]byte(trimmed), &cr); err == nil && cr.Category != "" {
-		return cr.Category, cr.Reason
+	var out []batchClassifyResponse
+	if err := json.Unmarshal([]byte(trimmed), &out); err != nil {
+		return nil
 	}
-	return strings.Trim(strings.TrimSpace(content), `"'.`), ""
+	return out
 }
 
 type PingResult struct {

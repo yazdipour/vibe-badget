@@ -8,70 +8,95 @@ import (
 	"testing"
 )
 
-func TestClassifyParsesCategoryAndReason(t *testing.T) {
+func TestClassifyBatchParsesResults(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/chat/completions" {
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
-				{"message": map[string]string{"content": `{"category":"Groceries","reason":"LIDL is a supermarket chain"}`}},
+				{"message": map[string]string{"content": `[
+					{"partner":"LIDL DANKT","category":"Groceries"},
+					{"partner":"Taxi Co","category":"Transport"}
+				]`}},
 			},
 		})
 	}))
 	defer srv.Close()
 
 	llm := NewLLM(LLMConfig{BaseURL: srv.URL, Model: "test"})
-	cat, reason, err := llm.Classify(context.Background(), "LIDL DANKT", []string{"Groceries", "Transport"})
-	if err != nil || cat != "Groceries" || reason != "LIDL is a supermarket chain" {
-		t.Fatalf("got cat=%q reason=%q err=%v", cat, reason, err)
+	results, err := llm.ClassifyBatch(context.Background(), []string{"LIDL DANKT", "Taxi Co"}, []string{"Groceries", "Transport"})
+	if err != nil {
+		t.Fatalf("ClassifyBatch: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("want 2 results, got %d: %+v", len(results), results)
+	}
+	if r := results["LIDL DANKT"]; r.Category != "Groceries" {
+		t.Fatalf("unexpected LIDL DANKT result: %+v", r)
+	}
+	if r := results["Taxi Co"]; r.Category != "Transport" {
+		t.Fatalf("unexpected Taxi Co result: %+v", r)
 	}
 }
 
-func TestClassifyStripsMarkdownFences(t *testing.T) {
+func TestClassifyBatchStripsMarkdownFences(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
-				{"message": map[string]string{"content": "```json\n{\"category\":\"Transport\",\"reason\":\"taxi fare\"}\n```"}},
+				{"message": map[string]string{"content": "```json\n[{\"partner\":\"Taxi Co\",\"category\":\"Transport\"}]\n```"}},
 			},
 		})
 	}))
 	defer srv.Close()
 
 	llm := NewLLM(LLMConfig{BaseURL: srv.URL, Model: "test"})
-	cat, reason, err := llm.Classify(context.Background(), "Taxi Co", []string{"Groceries", "Transport"})
-	if err != nil || cat != "Transport" || reason != "taxi fare" {
-		t.Fatalf("got cat=%q reason=%q err=%v", cat, reason, err)
+	results, err := llm.ClassifyBatch(context.Background(), []string{"Taxi Co"}, []string{"Transport"})
+	if err != nil || results["Taxi Co"].Category != "Transport" {
+		t.Fatalf("got results=%+v err=%v", results, err)
 	}
 }
 
-func TestClassifyFallsBackOnNonJSON(t *testing.T) {
+func TestClassifyBatchMissingPartnerOmitted(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{{"message": map[string]string{"content": "  Groceries\n"}}},
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": `[{"partner":"LIDL DANKT","category":"Groceries"}]`}},
+			},
 		})
 	}))
 	defer srv.Close()
 
 	llm := NewLLM(LLMConfig{BaseURL: srv.URL, Model: "test"})
-	cat, reason, err := llm.Classify(context.Background(), "LIDL DANKT", []string{"Groceries", "Transport"})
-	if err != nil || cat != "Groceries" || reason != "" {
-		t.Fatalf("got cat=%q reason=%q err=%v", cat, reason, err)
+	results, err := llm.ClassifyBatch(context.Background(), []string{"LIDL DANKT", "Unanswered Partner"}, []string{"Groceries"})
+	if err != nil {
+		t.Fatalf("ClassifyBatch: %v", err)
+	}
+	if _, ok := results["Unanswered Partner"]; ok {
+		t.Fatalf("expected no entry for a partner the LLM didn't answer, got: %+v", results)
+	}
+	if results["LIDL DANKT"].Category != "Groceries" {
+		t.Fatalf("unexpected result: %+v", results)
 	}
 }
 
-func TestClassifyUnknownFallsBack(t *testing.T) {
+func TestClassifyBatchUnknownCategoryFallsBackToUncategorized(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{{"message": map[string]string{"content": `{"category":"Spaceships","reason":"why not"}`}}},
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": `[{"partner":"???","category":"Spaceships"}]`}},
+			},
 		})
 	}))
 	defer srv.Close()
 
 	llm := NewLLM(LLMConfig{BaseURL: srv.URL, Model: "test"})
-	cat, _, err := llm.Classify(context.Background(), "???", []string{"Groceries"})
-	if err != nil || cat != "Uncategorized" {
-		t.Fatalf("want Uncategorized, got %q err %v", cat, err)
+	results, err := llm.ClassifyBatch(context.Background(), []string{"???"}, []string{"Groceries"})
+	if err != nil {
+		t.Fatalf("ClassifyBatch: %v", err)
+	}
+	if results["???"].Category != "Uncategorized" {
+		t.Fatalf("want Uncategorized, got %+v", results["???"])
 	}
 }
 

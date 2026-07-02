@@ -7,8 +7,10 @@ import (
 	"github.com/sh-yazdipour/vibe-badget/internal/store"
 )
 
+const classifyBatchSize = 50
+
 type Classifier interface {
-	Classify(ctx context.Context, partner string, categories []string) (category string, reason string, err error)
+	ClassifyBatch(ctx context.Context, partners []string, categories []string) (map[string]BatchClassification, error)
 }
 
 // LogEntry records why a single transaction ended up the way it did during a
@@ -29,10 +31,15 @@ type Result struct {
 }
 
 // Run applies rules to every uncategorized transaction, then sends whatever
-// is left to the LLM through a bounded worker pool of size `concurrency`.
-// onEntry, if non-nil, is called once per transaction the instant it's
-// resolved (rule match, LLM result, or skip), in addition to being recorded
-// in the returned Result.Log — used to stream progress to a caller.
+// is left to the LLM. Transactions are deduplicated by partner name before
+// hitting the LLM (identical partners share one classification), and unique
+// partners are split into batches of classifyBatchSize sent as a single
+// prompt each, fanned out through a bounded worker pool of size
+// `concurrency`. onEntry, if non-nil, is called once per transaction the
+// instant it's resolved (rule match, LLM result, or skip), in addition to
+// being recorded in the returned Result.Log — used to stream progress to a
+// caller. This per-transaction granularity is preserved even though the
+// underlying LLM calls are now batched, so callers don't need to change.
 func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int, onEntry func(LogEntry)) (Result, error) {
 	res := Result{Log: []LogEntry{}}
 	var mu sync.Mutex
@@ -97,52 +104,86 @@ func Run(ctx context.Context, s *store.Store, llm Classifier, concurrency int, o
 		return res, nil
 	}
 
-	// Pass 2: LLM in parallel.
+	// Pass 2: dedupe by partner name, then classify in batches of
+	// classifyBatchSize, fanned out through a bounded worker pool.
+	partnerTxIDs := map[string][]int64{}
+	var uniquePartners []string
+	for _, id := range forLLM {
+		p := partnerOf[id]
+		if _, ok := partnerTxIDs[p]; !ok {
+			uniquePartners = append(uniquePartners, p)
+		}
+		partnerTxIDs[p] = append(partnerTxIDs[p], id)
+	}
+
+	var batches [][]string
+	for i := 0; i < len(uniquePartners); i += classifyBatchSize {
+		end := i + classifyBatchSize
+		if end > len(uniquePartners) {
+			end = len(uniquePartners)
+		}
+		batches = append(batches, uniquePartners[i:end])
+	}
+
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
-	for _, id := range forLLM {
+	for _, batch := range batches {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(txID int64) {
+		go func(partners []string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			name, reason, cerr := llm.Classify(ctx, partnerOf[txID], classifiableNames)
+			results, berr := llm.ClassifyBatch(ctx, partners, classifiableNames)
+
 			mu.Lock()
 			defer mu.Unlock()
-			if cerr != nil {
-				res.Skipped++
-				record(LogEntry{
-					TxID: txID, Partner: partnerOf[txID], Source: "skipped", Reason: cerr.Error(),
-				})
-				return
-			}
-			if name == "Uncategorized" {
-				res.Skipped++
-				skipReason := reason
-				if skipReason == "" {
-					skipReason = "LLM returned Uncategorized"
+			for _, partner := range partners {
+				ids := partnerTxIDs[partner]
+				if berr != nil {
+					for _, txID := range ids {
+						res.Skipped++
+						record(LogEntry{TxID: txID, Partner: partner, Source: "skipped", Reason: berr.Error()})
+					}
+					continue
 				}
-				record(LogEntry{
-					TxID: txID, Partner: partnerOf[txID], Source: "skipped", Reason: skipReason,
-				})
-				return
-			}
-			if catID, ok := byName[name]; ok {
-				if err := s.SetCategory(txID, catID, "llm"); err == nil {
+				result, ok := results[partner]
+				if !ok {
+					for _, txID := range ids {
+						res.Skipped++
+						record(LogEntry{TxID: txID, Partner: partner, Source: "skipped", Reason: "no result from LLM"})
+					}
+					continue
+				}
+				if result.Category == "Uncategorized" {
+					for _, txID := range ids {
+						res.Skipped++
+						record(LogEntry{TxID: txID, Partner: partner, Source: "skipped", Reason: "LLM returned Uncategorized"})
+					}
+					continue
+				}
+				catID, ok := byName[result.Category]
+				if !ok {
+					for _, txID := range ids {
+						res.Skipped++
+						record(LogEntry{TxID: txID, Partner: partner, Source: "skipped", Reason: "unknown category returned: " + result.Category})
+					}
+					continue
+				}
+				for _, txID := range ids {
+					if err := s.SetCategory(txID, catID, "llm"); err != nil {
+						res.Skipped++
+						record(LogEntry{TxID: txID, Partner: partner, Source: "skipped", Reason: err.Error()})
+						continue
+					}
 					res.LLM++
 					record(LogEntry{
-						TxID: txID, Partner: partnerOf[txID], Category: name,
-						Source: "llm", Reason: reason,
+						TxID: txID, Partner: partner, Category: result.Category,
+						Source: "llm",
 					})
-					return
 				}
 			}
-			res.Skipped++
-			record(LogEntry{
-				TxID: txID, Partner: partnerOf[txID], Source: "skipped", Reason: "unknown category returned: " + name,
-			})
-		}(id)
+		}(batch)
 	}
 	wg.Wait()
 	return res, nil
