@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Category, type Rule, type Tx, type CategorizeLogEntry } from "@/lib/api";
+import { api, type Category, type Rule, type Tx, type CategorizeLogEntry, type AIRuleSuggestion } from "@/lib/api";
 import { suggestRules, type Suggestion } from "@/lib/suggestions";
 import { CATEGORY_ICONS, resolveIcon } from "@/lib/icons";
 import { PALETTE, readableTextColor } from "@/lib/colors";
@@ -35,6 +35,8 @@ export default function Categorize() {
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<{ icon: string; color: string; iconColor: string } | null>(null);
   const [newRule, setNewRule] = useState({ field: "partner_name", match_type: "keyword", pattern: "" });
+  const [aiSuggestions, setAiSuggestions] = useState<AIRuleSuggestion[] | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
   const reload = () => {
     api.transactions().then(setTxns);
@@ -59,6 +61,33 @@ export default function Categorize() {
 
   function dismiss(s: Suggestion) {
     setDismissed((prev) => new Set(prev).add(suggestionKey(s)));
+  }
+
+  async function suggestWithAI() {
+    setAiBusy(true);
+    try {
+      const result = await api.suggestRulesWithAI();
+      setAiSuggestions(result);
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function acceptAISuggestion(s: AIRuleSuggestion) {
+    try {
+      await api.createRule({ field: "partner_name", match_type: s.match_type, pattern: s.pattern, category_id: s.category_id });
+      toast.success(`Rule created: "${s.pattern}" → ${s.category_name}`);
+      setAiSuggestions((prev) => prev?.filter((x) => x !== s) ?? null);
+      reload();
+    } catch (e) {
+      toast.error(String(e));
+    }
+  }
+
+  function dismissAISuggestion(s: AIRuleSuggestion) {
+    setAiSuggestions((prev) => prev?.filter((x) => x !== s) ?? null);
   }
 
   async function createCategory() {
@@ -357,6 +386,31 @@ export default function Categorize() {
                 <div className="flex gap-2">
                   <Button size="sm" onClick={() => accept(s)}>Accept</Button>
                   <Button size="sm" variant="ghost" onClick={() => dismiss(s)}>Dismiss</Button>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>AI-suggested rules</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          <Button onClick={suggestWithAI} disabled={aiBusy}>Suggest with AI</Button>
+          {aiSuggestions === null ? (
+            <p className="text-muted-foreground">Click "Suggest with AI" to get rule suggestions from your configured LLM.</p>
+          ) : aiSuggestions.length === 0 ? (
+            <p className="text-muted-foreground">No suggestions.</p>
+          ) : (
+            aiSuggestions.map((s, i) => (
+              <div key={`${s.pattern}-${i}`} className="flex items-center justify-between gap-2 rounded-lg border p-2">
+                <div>
+                  <div><strong>"{s.pattern}"</strong> ({s.match_type}) → {s.category_name}</div>
+                  <div className="text-xs text-muted-foreground">{s.reason}</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => acceptAISuggestion(s)}>Accept</Button>
+                  <Button size="sm" variant="ghost" onClick={() => dismissAISuggestion(s)}>Dismiss</Button>
                 </div>
               </div>
             ))
