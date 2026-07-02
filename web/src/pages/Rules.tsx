@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Category, type Rule } from "@/lib/api";
+import { downloadCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +28,14 @@ export default function Rules() {
     catch (e) { toast.error(String(e)); }
   }
 
+  function exportRules() {
+    const rows: string[][] = [["Field", "MatchType", "Pattern", "Category"]];
+    for (const r of rules) {
+      rows.push([r.field, r.match_type, r.pattern, String(catName(r.category_id))]);
+    }
+    downloadCsv("rules-export.csv", rows);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-2">
@@ -45,6 +54,7 @@ export default function Rules() {
           <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
         <Button onClick={add}>Add rule</Button>
+        <Button variant="outline" onClick={exportRules}>Export</Button>
       </div>
 
       <Table>
