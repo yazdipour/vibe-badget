@@ -221,7 +221,11 @@ export default function Rules() {
                       value={String(resolvedCategoryId(item))}
                       onValueChange={(v) => { if (v) setCategoryOverrides((prev) => ({ ...prev, [item.key]: Number(v) })); }}
                     >
-                      <SelectTrigger className="h-7 w-40"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 w-40">
+                        <SelectValue>
+                          {(v: string) => cats.find((c) => String(c.id) === v)?.name ?? v}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>{cats.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
                     </Select>
                     {item.source === "ai" && <Badge variant="secondary">AI</Badge>}
