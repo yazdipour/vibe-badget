@@ -411,3 +411,15 @@ func TestDeleteAccount(t *testing.T) {
 		t.Fatalf("deleted account's data still present: %s", rec3.Body)
 	}
 }
+
+func TestSuggestRulesEndpointUnconfigured(t *testing.T) {
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	h := NewServer(store.New(d), os.DirFS("."))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/rules/suggest", nil))
+	if rec.Code != 400 {
+		t.Fatalf("want 400 for unconfigured LLM, got %d: %s", rec.Code, rec.Body)
+	}
+}
