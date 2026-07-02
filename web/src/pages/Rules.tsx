@@ -18,10 +18,28 @@ import { toast } from "sonner";
 
 const FIELDS = ["partner_iban", "partner_name", "type", "payment_reference"];
 const MATCHES = ["exact", "keyword"];
+const DISMISSED_STORAGE_KEY = "vibe-badget:dismissed-rule-suggestions";
 
 type ListItem =
   | { source: "heuristic"; key: string; pattern: string; categoryName: string; categoryId: number; count: number; matchType: "exact" }
   | { source: "ai"; key: string; pattern: string; categoryName: string; categoryId: number; reason: string; matchType: string };
+
+function loadDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissed(dismissed: Set<string>) {
+  try {
+    localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify([...dismissed]));
+  } catch {
+    // localStorage unavailable (private mode, quota exceeded, etc.) — dismissals just won't persist.
+  }
+}
 
 export default function Rules() {
   const [rules, setRules] = useState<Rule[]>([]);
@@ -29,7 +47,7 @@ export default function Rules() {
   const [txns, setTxns] = useState<Tx[]>([]);
   const [draft, setDraft] = useState({ field: "partner_name", match_type: "keyword", pattern: "", category_id: 0 });
   const [aiSuggestions, setAiSuggestions] = useState<AIRuleSuggestion[]>([]);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(() => loadDismissed());
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, number>>({});
   const [patternOverrides, setPatternOverrides] = useState<Record<string, string>>({});
   const [suggestPhase, setSuggestPhase] = useState<"idle" | "running" | "stopped" | "error" | "done">("idle");
@@ -41,6 +59,7 @@ export default function Rules() {
 
   const reload = () => api.rules().then(setRules);
   useEffect(() => { reload(); api.categories().then(setCats); api.transactions().then(setTxns); }, []);
+  useEffect(() => { saveDismissed(dismissed); }, [dismissed]);
 
   const catName = (id: number) => cats.find((c) => c.id === id)?.name ?? id;
 
@@ -123,6 +142,10 @@ export default function Rules() {
         pattern: s.pattern, categoryName: s.category_name, categoryId: s.category_id,
         reason: s.reason, matchType: s.match_type,
       }));
+    console.log(
+      `[rules] items recomputed: heuristic=${heuristic.length} (raw=${heuristicSuggestions.length}) `
+      + `ai=${ai.length} (raw=${aiSuggestions.length}) dismissed=${dismissed.size}`,
+    );
     return [...heuristic, ...ai];
   }, [heuristicSuggestions, aiSuggestions, dismissed]);
 
@@ -150,10 +173,14 @@ export default function Rules() {
   }
 
   function dismissItem(item: ListItem) {
+    console.log("[rules] dismissing suggestion", item.key);
     setDismissed((prev) => new Set(prev).add(item.key));
   }
 
-  function wipeAiSuggestions() {
+  // Clears AI-fetched suggestions only — used internally right before a new
+  // "Suggest with AI" call so repeated clicks replace results instead of
+  // accumulating them.
+  function wipeAiOnly() {
     setAiSuggestions([]);
     setDismissed((prev) => new Set([...prev].filter((k) => !k.startsWith("a:"))));
     setCategoryOverrides((prev) =>
@@ -162,8 +189,24 @@ export default function Rules() {
       Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith("a:"))));
   }
 
+  // "Wipe suggestions" button: dismisses everything currently visible
+  // (heuristic + AI), persisted via the dismissed-set localStorage effect
+  // so it survives page reloads too.
+  function wipeAllSuggestions() {
+    console.log("[rules] wiping all suggestions, count=", items.length, "keys=", items.map((i) => i.key));
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      for (const item of items) next.add(item.key);
+      return next;
+    });
+    setAiSuggestions([]);
+    setCategoryOverrides({});
+    setPatternOverrides({});
+  }
+
   async function suggestWithAI() {
-    wipeAiSuggestions();
+    console.log("[rules] suggestWithAI: starting");
+    wipeAiOnly();
     const controller = new AbortController();
     abortRef.current = controller;
     startRef.current = Date.now();
@@ -190,9 +233,11 @@ export default function Rules() {
           const parsed = JSON.parse(line);
           if (parsed.done) {
             if (parsed.error) {
+              console.log("[rules] suggestWithAI: error", parsed.error);
               setSuggestError(parsed.error);
               setSuggestPhase("error");
             } else {
+              console.log("[rules] suggestWithAI: got", (parsed.suggestions ?? []).length, "suggestion(s)");
               setAiSuggestions(parsed.suggestions ?? []);
               setSuggestPhase("done");
             }
@@ -226,7 +271,7 @@ export default function Rules() {
         <CardContent className="space-y-2">
           <div className="flex gap-2">
             <Button onClick={suggestWithAI} disabled={suggestPhase === "running"}>Suggest with AI</Button>
-            <Button variant="outline" onClick={wipeAiSuggestions}>
+            <Button variant="outline" onClick={wipeAllSuggestions}>
               Wipe suggestions
             </Button>
           </div>
