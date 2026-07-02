@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { AccountInfoDialog } from "@/components/AccountInfoDialog";
 import { UploadDialog } from "@/components/UploadDialog";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import Transactions from "./pages/Transactions";
 import Rules from "./pages/Rules";
 import Settings from "./pages/Settings";
@@ -36,7 +35,6 @@ export default function App() {
               ))}
               <div className="ml-auto flex items-center gap-1">
                 <AccountInfoDialog />
-                <ThemeToggle />
                 <UploadDialog />
                 <NavLink
                   to="/settings"

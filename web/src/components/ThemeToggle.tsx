@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   return (
     <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+      variant="outline"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
     >
-      {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+      {isDark ? <Moon size={16} /> : <Sun size={16} />}
+      {isDark ? "Dark mode" : "Light mode"}
     </Button>
   );
 }
