@@ -36,3 +36,5 @@ web/node_modules/
 web/dist/assets/
 web/dist/*.js
 web/dist/*.css
+
+docs/superpowers/
