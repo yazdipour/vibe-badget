@@ -1,8 +1,12 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sh-yazdipour/vibe-badget/internal/categorize"
 )
@@ -29,19 +33,36 @@ func (s *Server) suggestRules(w http.ResponseWriter, r *http.Request) {
 		BaseURL: kv["llm_base_url"], APIKey: kv["llm_api_key"], Model: kv["llm_model"],
 	})
 
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	flusher, _ := w.(http.Flusher)
+	enc := json.NewEncoder(w)
+	logLine := func(msg string) {
+		enc.Encode(map[string]string{"log": msg})
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+	fail := func(err error) {
+		log.Printf("suggestRules: %v", err)
+		enc.Encode(map[string]any{"done": true, "error": err.Error()})
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+
 	txns, err := s.store.ListTransactions(0)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		fail(err)
 		return
 	}
 	rules, err := s.store.ActiveRules()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		fail(err)
 		return
 	}
 	cats, err := s.store.ListCategories()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		fail(err)
 		return
 	}
 
@@ -92,6 +113,8 @@ func (s *Server) suggestRules(w http.ResponseWriter, r *http.Request) {
 		partners = append(partners, categorize.PartnerCategory{Partner: partner, Category: best})
 	}
 
+	logLine(fmt.Sprintf("Found %d partner(s) to analyze", len(partners)))
+
 	var categoryNames []string
 	catByName := map[string]int64{}
 	for _, c := range cats {
@@ -99,11 +122,22 @@ func (s *Server) suggestRules(w http.ResponseWriter, r *http.Request) {
 		catByName[c.Name] = c.ID
 	}
 
-	suggestions, err := llm.SuggestRules(r.Context(), partners, existingPatterns, categoryNames)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
+	if len(partners) == 0 {
+		enc.Encode(map[string]any{"done": true, "suggestions": []aiRuleSuggestionResponse{}})
+		if flusher != nil {
+			flusher.Flush()
+		}
 		return
 	}
+
+	logLine("Calling LLM...")
+	start := time.Now()
+	suggestions, err := llm.SuggestRules(r.Context(), partners, existingPatterns, categoryNames)
+	if err != nil {
+		fail(err)
+		return
+	}
+	logLine(fmt.Sprintf("Got %d raw suggestion(s) from LLM in %s", len(suggestions), time.Since(start).Round(time.Second)))
 
 	out := []aiRuleSuggestionResponse{}
 	for _, sug := range suggestions {
@@ -120,5 +154,8 @@ func (s *Server) suggestRules(w http.ResponseWriter, r *http.Request) {
 			CategoryID: catID, Reason: sug.Reason,
 		})
 	}
-	writeJSON(w, 200, out)
+	enc.Encode(map[string]any{"done": true, "suggestions": out})
+	if flusher != nil {
+		flusher.Flush()
+	}
 }

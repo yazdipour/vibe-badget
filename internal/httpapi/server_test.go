@@ -423,3 +423,75 @@ func TestSuggestRulesEndpointUnconfigured(t *testing.T) {
 		t.Fatalf("want 400 for unconfigured LLM, got %d: %s", rec.Code, rec.Body)
 	}
 }
+
+func TestSuggestRulesStreams(t *testing.T) {
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": `[{"pattern":"Lidl","match_type":"exact","category":"Groceries","reason":"x"}]`}},
+			},
+		})
+	}))
+	defer llmSrv.Close()
+
+	d, _ := db.Open(":memory:")
+	defer d.Close()
+	s := store.New(d)
+	h := NewServer(s, os.DirFS("."))
+
+	putReq := httptest.NewRequest("PUT", "/api/settings",
+		bytes.NewBufferString(fmt.Sprintf(`{"llm_base_url":%q,"llm_model":"test"}`, llmSrv.URL)))
+	putRec := httptest.NewRecorder()
+	h.ServeHTTP(putRec, putReq)
+	if putRec.Code != 204 {
+		t.Fatalf("configure settings: %d %s", putRec.Code, putRec.Body)
+	}
+
+	catsRec := httptest.NewRecorder()
+	h.ServeHTTP(catsRec, httptest.NewRequest("GET", "/api/categories", nil))
+	var cats []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	json.Unmarshal(catsRec.Body.Bytes(), &cats)
+	var groceriesID int64
+	for _, c := range cats {
+		if c.Name == "Groceries" {
+			groceriesID = c.ID
+		}
+	}
+	if groceriesID == 0 {
+		t.Fatal("Groceries category not found")
+	}
+
+	_, err := s.InsertTransactions([]model.Transaction{
+		{AccountName: "Main", PartnerName: "Lidl Extra", AmountEUR: -5, DedupeHash: "sr-stream-1",
+			CategoryID: &groceriesID, CategorizedBy: "llm"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/rules/suggest", nil))
+	if rec.Code != 200 {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/x-ndjson" {
+		t.Fatalf("want ndjson content-type, got %q", ct)
+	}
+	lines := bytes.Split(bytes.TrimSpace(rec.Body.Bytes()), []byte("\n"))
+	if len(lines) < 2 {
+		t.Fatalf("expected at least a log line and a done line, got %d: %s", len(lines), rec.Body)
+	}
+	var last struct {
+		Done        bool                        `json:"done"`
+		Suggestions []aiRuleSuggestionResponse `json:"suggestions"`
+	}
+	if err := json.Unmarshal(lines[len(lines)-1], &last); err != nil {
+		t.Fatalf("decode last line: %v line=%s", err, lines[len(lines)-1])
+	}
+	if !last.Done || len(last.Suggestions) != 1 || last.Suggestions[0].Pattern != "Lidl" {
+		t.Fatalf("unexpected final line: %s", lines[len(lines)-1])
+	}
+}
